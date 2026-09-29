@@ -1,1 +1,0 @@
-Electron 43 + electron-builder 26, Node ≥18; renderer uses Leaflet + CartoDB basemaps for the monitor overlay.

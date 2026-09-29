@@ -1,4 +1,0 @@
-- IPC channels follow a `<domain>:<action>` naming convention (e.g. `store:load`, `file:pick`, `voice:save`) registered in `main.js` and exposed as flat methods on `window.api` in `preload.js`.
-- All renderer-to-main calls go through `ipcRenderer.invoke` returning promises; fire-and-forget commands use `ipcRenderer.send` (e.g. `monitor:open`).
-- File access from the renderer is always mediated by the `local-file://` protocol and `safeFile` path normalization — renderers never reference `app.getPath('userData')` directly.
-- Every renderer mutation follows a write-then-persist pattern: update in-memory state, call `render()`, then `await api.save()`.

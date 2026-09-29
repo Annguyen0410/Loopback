@@ -1,1 +1,0 @@
-`npm start` / `npm run dev` launch the app via `electron .`; `npm run build` / `npm run dist` produce Windows NSIS installer and portable builds through `electron-builder`.

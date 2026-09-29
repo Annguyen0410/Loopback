@@ -1,1 +1,0 @@
-Single-window Electron desktop chat app that persists local conversations, files, voice notes, and a Canvas whiteboard behind strict IPC boundaries.

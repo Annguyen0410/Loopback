@@ -1,1 +1,0 @@
-Leaflet 1.9.4 (dark Carto basemap tiles) + Electron `contextBridge`/`ipcRenderer`; CSS uses `backdrop-filter: blur()` and `@keyframes scroll` for ticker animations.

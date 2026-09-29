@@ -1,6 +1,0 @@
-- Every DOM update path wraps its body in `try/catch` and logs `[Monitor] ...` console messages so failures never crash the dashboard.
-- UI sections are wired as numbered `/* ===== STEP N: ... */` blocks inside one IIFE, each ending with a `console.log('[Monitor] ... started/wired')` marker.
-- Data-driven lists (countries, finance tables, devices, news) are rendered by building an HTML string via `.innerHTML = html` rather than creating nodes individually.
-- Periodic updates use `setInterval(fn, ms)` paired with an initial synchronous call so the panel shows values immediately on load.
-- User-facing text is templated via simple `.replace('{ip}', rndIp())` style substitution instead of a template library.
-- Widget visibility is driven by a single `WIDGETS` registry plus `localStorage` keys prefixed `wm_widget_`, toggled through a shared `toggleWidget(id)` function and document-delegated `.widget-toggle` clicks.
