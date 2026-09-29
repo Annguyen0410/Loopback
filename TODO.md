@@ -1,6 +1,6 @@
 # Cleanup & Verification Log
 
-## v1.3.9 — Vòng sửa UI: nút floating bar, section kéo co giãn, theme
+## v1.4.0 — Vòng sửa UI: nút floating bar, section kéo co giãn, theme
 
 ### Bối cảnh (bạn yêu cầu)
 1. Mở lại màn hình từ floating bar: mấy nút dễ bấm nhầm (thu nhỏ / tắt) và cảm giác “mất luôn floating bar” → cần tooltip nói rõ từng nút, và trừ nút tắt ra thì các nút khác phải luôn để lại floating bar; đã tắt thì vào app bấm nút floating bar vẫn dựng lại được.
@@ -18,11 +18,17 @@
 - **Hai bug thật phát hiện trong lúc sửa**: `--chat-wall` và `--focus-ring` từng khai báo ở `:root` nhưng lại tham chiếu `var(--accent)` (định nghĩa ở `body`) → custom property đó **compute thành guaranteed-invalid và mất trắng**: theme mặc định (blue) không có wallpaper, và **focus ring bàn phím không hề hiện**. Đã dời cả hai sang block `body` (nơi có `--accent`).
 
 ### Kiểm chứng (đều chạy thật)
-- [x] `uitest.js` (suite mới, 24 check): tooltip hiện/đúng vị trí/trả lại `title`; nút Show chats ẩn-hiện đúng theo trạng thái; kéo sidebar 300→390 và media panel 360→440, cả hai ghi vào `settings.json`; minimize khi đang mở panel → bar 56×248 + panel đã đóng; close là nút duy nhất làm mất bar; **`pip:collapse` sau khi đã close vẫn dựng lại bar**; 32 tổ hợp theme/mode đều có wallpaper 2 lớp; cột tin nhắn trong suốt; focus ring vẽ ra thật → **RESULT PASS**.
+- [x] `uitest.js` (suite mới, 25 check): tooltip hiện/đúng vị trí/trả lại `title`; nút Show chats ẩn-hiện đúng theo trạng thái; kéo sidebar 300→390 và media panel 360→440, cả hai ghi vào `settings.json`; minimize khi đang mở panel → bar 56×248 + panel đã đóng; close là nút duy nhất làm mất bar; **`pip:collapse` sau khi đã close vẫn dựng lại bar**; 32 tổ hợp theme/mode đều có wallpaper 2 lớp; cột tin nhắn trong suốt; focus ring vẽ ra thật → **RESULT PASS**.
 - [x] `audittest.js` PASS: 32 tổ hợp theme giữ contrast (xấu nhất `onSolid` 4.51, bubble 4.6), 106 id DOM đều tồn tại, 65 đường `api.*` đều có trên bridge, 0 console error, không `error.log`.
 - [x] `piptest.js` PASS toàn bộ (drag, expand, collapse cùng tick, resize/flip giữ tâm, minimize → bar, mở lại app).
 - [x] `combotest.js` **RESULT PASS** (không có dòng FAIL nào). `hudtest.js`, `menutest.js` PASS (5 nút bubble vẫn đủ `title`, panel 320×420 vẫn không cắt chữ).
-- [ ] **Chưa build lại exe** — bạn chưa yêu cầu; `package.json` vẫn đang là **1.3.9**. Khi cần: bump version → `npx electron-builder --win` → cài đè (`appId` từ 1.3.9 giữ nguyên nên cài đè tại chỗ được).
+- [x] **Build 1.4.0 + đẩy lên GitHub** (bạn yêu cầu “build cho tui exe mới xóa exe cũ đi đồng thời push lên github lun”):
+  - `package.json` **1.3.9 → 1.4.0**; `npx electron-builder --win` → `dist\Loopback Setup 1.4.0.exe` (103.773.638 B), `dist\Loopback 1.4.0.exe` (103.551.522 B), blockmap + `latest.yml` version **1.4.0**.
+  - **Asar bản build:** 86 entry (86 file), **62/62 file `src/*.js` đọc được**, hash SHA-256 **SAME** với working tree cho `src/renderer/tip.js`, `src/renderer/panelsize.js`, `src/renderer/main.js`, `main.js`, `index.html`, `styles.css`, `preload.js`; `package.json` trong asar = **1.4.0**.
+  - **Dọn `dist/`:** xoá `Loopback 1.3.9.exe`, `Loopback Setup 1.3.9.exe`, blockmap 1.3.9 và `win-unpacked` → **198M**, chỉ còn bộ 1.4.0.
+  - **Chạy thử bản portable 1.4.0** với profile vứt đi (`%LOCALAPPDATA%\Temp\lb-portable-140`): 7 tiến trình, cửa sổ `Loopback` `Responding: True`, tự tạo `files/`+`voice/`+`captures/`+`pip.json`, **không có `error.log`**; tắt riêng bản portable — **không đụng** app 1.3.9 đang chạy của bạn (vẫn đủ 7 tiến trình sau đó).
+  - **Push:** commit `632953b` → `github.com/Annguyen0410/Loopback` nhánh `main` (`15ccb02..632953b`, không cần force).
+  - **Chưa cài đè** lên bản 1.3.9 đang chạy (bạn chỉ yêu cầu build + xoá exe cũ + push). App đang mở vẫn là 1.3.9; muốn lên 1.4.0 thì: tắt app → chạy `dist\Loopback Setup 1.4.0.exe` (appId giữ nguyên nên cài đè tại chỗ, dữ liệu trong `%APPDATA%\messenger-self-chat` không đổi).
 
 ## v1.3.9 — Đổi tên app: *Messenger Self-Chat* → **Loopback**
 
