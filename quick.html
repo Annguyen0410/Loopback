@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+  <title>Quick note</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      font-size:14px;background:#1c1e21;color:#e4e6eb;overflow:hidden;user-select:none;
+      --q-accent:#0084ff;--q-hint:#8a8d91;--q-chip:#2d2f33;
+    }
+    body.light{background:#f0f2f5;color:#050505;--q-hint:#65676b;--q-chip:#e4e6eb}
+    #bar{display:flex;align-items:center;gap:10px;padding:10px 12px 6px;-webkit-app-region:drag;cursor:default}
+    #bar .bolt{font-size:14px}
+    #bar h1{font-size:13px;font-weight:700;letter-spacing:.3px}
+    #bar .accel{margin-left:auto;font-size:11px;color:var(--q-hint);-webkit-app-region:no-drag}
+    #btnClose{
+      width:24px;height:24px;border:0;border-radius:50%;background:transparent;color:var(--q-hint);
+      font-size:12px;cursor:pointer;-webkit-app-region:no-drag
+    }
+    #btnClose:hover{background:var(--q-chip);color:inherit}
+    #chats{display:flex;gap:6px;padding:2px 12px 6px;overflow-x:auto;scrollbar-width:none}
+    #chats::-webkit-scrollbar{display:none}
+    .chip{
+      border:0;padding:4px 12px;border-radius:20px;background:var(--q-chip);color:inherit;
+      font:inherit;font-size:12px;white-space:nowrap;cursor:pointer;opacity:.7
+    }
+    .chip:hover{opacity:1}
+    .chip.active{background:var(--q-accent);color:#fff;opacity:1;font-weight:600}
+    #note{
+      width:100%;height:82px;resize:none;border:0;outline:none;background:transparent;color:inherit;
+      font:inherit;font-size:15px;line-height:1.45;padding:4px 14px;user-select:text;-webkit-user-select:text
+    }
+    #note::placeholder{color:var(--q-hint)}
+    #foot{display:flex;align-items:center;gap:8px;padding:4px 12px 10px;font-size:11px;color:var(--q-hint)}
+    #status{margin-left:auto}
+    #status.ok{color:#31a24c;font-weight:700}
+    #status.err{color:#f87171;font-weight:700}
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <span class="bolt">&#9889;</span>
+    <h1>Quick note</h1>
+    <span class="accel">Ctrl+Alt+N</span>
+    <button id="btnClose" title="Close (Esc)">&#10005;</button>
+  </div>
+  <div id="chats"></div>
+  <textarea id="note" placeholder="Write it down before it's gone…" autofocus></textarea>
+  <div id="foot">
+    <span>Enter to save &middot; Shift+Enter = new line &middot; Esc to close</span>
+    <span id="status"></span>
+  </div>
+  <script src="quick.js"></script>
+</body>
+</html>

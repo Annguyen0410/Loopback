@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https: 'unsafe-inline'; style-src 'self' https: 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src https://earthquake.usgs.gov https://*.basemaps.cartocdn.com https://unpkg.com https://opensky-network.org https://eonet.gsfc.nasa.gov https://api.wheretheiss.at https://api.coingecko.com https://open.er-api.com;">
+  <meta charset="utf-8">    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https:; connect-src 'self' https://api.open-meteo.com https://air-quality-api.open-meteo.com https://open.er-api.com https://api.coingecko.com https://api.alternative.me https://min-api.cryptocompare.com https://www.gdacs.org https://api.gdeltproject.org https://api.ioda.inetintel.cc.gatech.edu https://unpkg.com https://feeds.bbci.co.uk https://services.swpc.noaa.gov https://api.openaq.org https://db.satnogs.org https://www.youtube.com https://api.worldbank.org https://marine-api.open-meteo.com https://gamma-api.polymarket.com;">
   <title>World Monitor</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="monitor.css">
@@ -10,48 +9,75 @@
 <body>
   <div id="map"></div>
 
-  <button class="close-btn" id="closeBtn" title="Close (ESC)">&#x2715;</button>
-  <button class="widgets-btn" id="widgetsBtn" title="Widget Settings">
+  <!-- ================= TOP CONTROLS ================= -->
+  <button class="close-btn" id="closeBtn" title="Close (ESC)" aria-label="Close World Monitor">&#x2715;</button>
+  <button class="widgets-btn" id="widgetsBtn" title="Widget Settings" aria-label="Widget settings" aria-haspopup="true" aria-expanded="false">
     <span class="wg-icon">&#x2699;</span>
     <span class="wg-label">WIDGETS</span>
   </button>
-
-  <!-- Widget Settings Menu -->
   <div class="widgets-menu" id="widgetsMenu"></div>
 
-  <div class="header">
+  <!-- ================= HEADER ================= -->
+  <div class="header" role="banner">
     <span class="header-title">WORLD MONITOR</span>
-    <span class="header-live"><span class="live-dot"></span>LIVE</span>
-    <span class="header-clock" id="clock">--:--:-- UTC</span>
-    <span class="header-time" id="updateTime"></span>
+    <span class="header-live" title="Live data feeds active"><span class="live-dot"></span>LIVE</span>
+    <span class="header-clock" id="clock" aria-live="off">--:--:-- UTC</span>
+    <span class="header-date" id="headerDate"></span>
+    <span class="header-time" id="updateTime" aria-live="polite"></span>
   </div>
 
-  <!-- Financial Ticker -->
+  <!-- ================= MARKETS TICKER ================= -->
   <div class="fin-ticker-wrap widget" id="finTickerWrap" data-widget="finTicker" data-name="MARKETS">
     <button class="widget-toggle" title="Toggle" data-target="finTicker">&#x23FB;</button>
     <span class="fin-label">MARKETS</span>
     <div class="fin-ticker" id="finTicker"></div>
   </div>
 
-  <!-- Seismic Stats -->
-  <div class="stats widget" id="stats" data-widget="stats" data-name="SEISMIC STATS">
-    <button class="widget-toggle" title="Toggle" data-target="stats">&#x23FB;</button>
-    <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value">Loading...</span></div>
-  </div>
-
-  <!-- Left Sidebar -->
+  <!-- ================= LEFT SIDEBAR ================= -->
   <div class="sidebar" id="sidebar">
-    <div class="sb-tabs">
-      <button class="sb-tab active" data-tab="risk" title="Country Risk">🌍<span class="sb-tab-label">RISK</span></button>
-      <button class="sb-tab" data-tab="route" title="Route Explorer">🚢<span class="sb-tab-label">ROUTE</span></button>
-      <button class="sb-tab" data-tab="scenario" title="Scenario Engine">⚡<span class="sb-tab-label">SCEN</span></button>
-      <button class="sb-tab" data-tab="finance" title="Financial Data">💹<span class="sb-tab-label">FIN</span></button>
-      <button class="sb-tab" data-tab="infra" title="Infrastructure">🏗<span class="sb-tab-label">INFRA</span></button>
-      <button class="sb-tab sb-collapse" id="sbCollapse" title="Toggle sidebar">&#x25C0;</button>
+    <div class="sb-tabs" role="tablist" aria-label="Monitor sections">
+      <button class="sb-tab active" data-tab="intel" title="Intel &amp; Disasters" role="tab" aria-selected="true">📡<span class="sb-tab-label">INTEL</span></button>
+      <button class="sb-tab" data-tab="risk" title="Country Risk" role="tab" aria-selected="false">🌍<span class="sb-tab-label">RISK</span></button>
+      <button class="sb-tab" data-tab="route" title="Route Explorer" role="tab" aria-selected="false">🚢<span class="sb-tab-label">ROUTE</span></button>
+      <button class="sb-tab" data-tab="scenario" title="Scenario Engine" role="tab" aria-selected="false">⚡<span class="sb-tab-label">SCEN</span></button>
+      <button class="sb-tab" data-tab="finance" title="Financial Data" role="tab" aria-selected="false">💹<span class="sb-tab-label">FIN</span></button>
+      <button class="sb-tab" data-tab="infra" title="Infrastructure" role="tab" aria-selected="false">🏗<span class="sb-tab-label">INFRA</span></button>
+      <button class="sb-tab sb-collapse" id="sbCollapse" title="Toggle sidebar" aria-label="Collapse sidebar">&#x25C0;</button>
     </div>
     <div class="sb-body" id="sbBody">
+      <!-- INTEL TAB (default active) -->
+      <div class="sb-content active" id="sbIntel">
+        <div class="fin-section">
+          <div class="fin-sec-title">GLOBAL DISASTERS (GDACS) <span class="fin-live-dot" id="dotGdacs" style="display:none">◉</span></div>
+          <div class="fin-table" id="gdacsList"><div class="panel-loading"><div class="skel"></div><div class="skel w-75"></div><div class="skel w-90"></div></div></div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">CONFLICT TRACKER (GDELT) <span class="fin-live-dot" id="dotGdelt" style="display:none">◉</span></div>
+          <div class="fin-table" id="gdeltList"><div class="panel-loading"><div class="skel"></div><div class="skel w-60"></div><div class="skel w-90"></div></div></div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">INTERNET OUTAGES (IODA) <span class="fin-live-dot" id="dotIoda" style="display:none">◉</span></div>
+          <div class="fin-table" id="iodaList"><div class="panel-loading"><div class="skel w-90"></div><div class="skel w-60"></div></div></div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">AIR QUALITY HOTSPOTS <span class="fin-live-dot" id="dotOaq" style="display:none">◉</span></div>
+          <div class="fin-table" id="oaqList"><div class="panel-loading"><div class="skel w-75"></div><div class="skel"></div></div></div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">TOP SIGNALS <span class="fin-live-dot" id="dotSignals" style="display:none">◉</span></div>
+          <div class="fin-table" id="topSignals"><div class="panel-loading"><div class="skel"></div><div class="skel w-90"></div><div class="skel w-60"></div></div></div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">INSTABILITY INDEX — TOP 5</div>
+          <div class="fin-table" id="instabilityList"></div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">MARITIME CHOKEPOINTS <span class="choke-ref">REFERENCE</span></div>
+          <div class="fin-table" id="chokepointList"></div>
+        </div>
+      </div>
       <!-- RISK TAB -->
-      <div class="sb-content active" id="sbRisk">
+      <div class="sb-content" id="sbRisk">
         <input class="sb-search" id="riskSearch" placeholder="Search country or ISO...">
         <div class="risk-hdr">
           <span class="risk-sort pinned-sort" id="sortPinned" title="Pinned first">📌</span>
@@ -108,7 +134,7 @@
           <div class="fin-table" id="finCurrencies"></div>
         </div>
         <div class="fin-section">
-          <div class="fin-sec-title">CENTRAL BANK RATES</div>
+          <div class="fin-sec-title">CENTRAL BANK RATES <span class="choke-ref">NO FREE SOURCE</span></div>
           <div class="fin-table" id="finRates"></div>
         </div>
         <div class="fin-section">
@@ -120,147 +146,236 @@
           <div class="fin-table" id="finYield"></div>
         </div>
         <div class="fin-section">
-          <div class="fin-sec-title">PREDICTION MARKETS</div>
+          <div class="fin-sec-title">PREDICTION MARKETS <span class="choke-ref">NO FREE SOURCE</span></div>
           <div class="fin-table" id="finPrediction"></div>
         </div>
         <div class="fin-section">
-          <div class="fin-sec-title">GDP &amp; INFLATION</div>
+          <div class="fin-sec-title">FEEDS <span class="fin-live-dot" id="dotFeeds" style="display:none">◉</span></div>
+          <div class="fin-table" id="finFeeds"></div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">GDP &amp; INFLATION <span class="choke-ref">WORLD BANK</span> <span class="fin-live-dot" id="finGdpDot" style="display:none">◉</span></div>
           <div class="fin-table" id="finGDP"></div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">CRYPTO MARKET <span class="fin-live-dot" id="dotCgGlobal" style="display:none">◉</span></div>
+          <div class="fin-table" id="finCryptoGlobal"></div>
         </div>
       </div>
       <!-- INFRA TAB -->
       <div class="sb-content" id="sbInfra">
         <div class="fin-section">
-          <div class="fin-sec-title">UNDERSEA CABLE STATUS</div>
+          <div class="fin-sec-title">UNDERSEA CABLE SYSTEMS <span class="choke-ref">TELEGEOGRAPHY</span></div>
           <div class="fin-table" id="infraCables"></div>
         </div>
         <div class="fin-section">
-          <div class="fin-sec-title">PORT CONGESTION</div>
+          <div class="fin-sec-title">PORT CONDITIONS <span class="choke-ref">OPEN-METEO</span></div>
           <div class="fin-table" id="infraPorts"></div>
         </div>
         <div class="fin-section">
-          <div class="fin-sec-title">ENERGY STORAGE</div>
+          <div class="fin-sec-title">ENERGY <span class="choke-ref">WORLD BANK</span></div>
           <div class="fin-table" id="infraEnergy"></div>
-        </div>
-        <div class="fin-section">
-          <div class="fin-sec-title">CRITICAL PIPELINES</div>
-          <div class="fin-table" id="infraPipes"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Country Risk Detail Modal -->
-  <div class="modal-overlay" id="riskModal" style="display:none">
-    <div class="modal-box">
-      <div class="modal-close" id="riskModalClose">&#x2715;</div>
-      <div class="modal-title" id="riskModalTitle"></div>
-      <div class="modal-scores" id="riskModalScores"></div>
-      <div class="modal-domains" id="riskModalDomains"></div>
-    </div>
-  </div>
-
-  <!-- Map Layer Toggles -->
+  <!-- ================= MAP LAYERS ================= -->
   <div class="layer-bar widget" id="layerBar" data-widget="layerBar" data-name="MAP LAYERS">
-    <label class="layer-toggle"><input type="checkbox" checked onchange="window._toggleLayer &amp;&amp; window._toggleLayer('quakes',this.checked)"> <span class="layer-dot" style="background:#ff6600"></span>Quakes</label>
-    <label class="layer-toggle"><input type="checkbox" onchange="window._toggleLayer &amp;&amp; window._toggleLayer('military',this.checked)"> <span class="layer-dot" style="background:#0088ff"></span>Aircraft ◉</label>
-    <label class="layer-toggle"><input type="checkbox" onchange="window._toggleLayer &amp;&amp; window._toggleLayer('naval',this.checked)"> <span class="layer-dot" style="background:#00ccaa"></span>Naval</label>
-    <label class="layer-toggle"><input type="checkbox" onchange="window._toggleLayer &amp;&amp; window._toggleLayer('wildfire',this.checked)"> <span class="layer-dot" style="background:#ff4444"></span>Hazards ◉</label>
-    <label class="layer-toggle"><input type="checkbox" onchange="window._toggleLayer &amp;&amp; window._toggleLayer('cyber',this.checked)"> <span class="layer-dot" style="background:#aa00ff"></span>Cyber</label>
-    <label class="layer-toggle"><input type="checkbox" onchange="window._toggleLayer &amp;&amp; window._toggleLayer('disease',this.checked)"> <span class="layer-dot" style="background:#ffdd00"></span>Events ◉</label>
-    <label class="layer-toggle"><input type="checkbox" onchange="window._toggleLayer &amp;&amp; window._toggleLayer('satellites',this.checked)"> <span class="layer-dot" style="background:#888"></span>Satellites ◉</label>
-    <label class="layer-toggle"><input type="checkbox" onchange="window._toggleLayer &amp;&amp; window._toggleLayer('cables',this.checked)"> <span class="layer-dot" style="background:#ff4488"></span>Cables</label>
-    <label class="layer-toggle"><input type="checkbox" onchange="window._toggleLayer &amp;&amp; window._toggleLayer('ports',this.checked)"> <span class="layer-dot" style="background:#44ccff"></span>Ports</label>
-    <button class="widget-toggle" title="Toggle" data-target="layerBar">&#x23FB;</button>
+    <div class="base-switch" title="Map style" role="group" aria-label="Base map style">
+      <button class="base-btn active" id="baseDark" aria-pressed="true">Dark</button>
+      <button class="base-btn" id="baseLight" aria-pressed="false">Light</button>
+      <button class="base-btn" id="baseSat" aria-pressed="false">Sat</button>
+    </div>
+    <div class="layer-divider" aria-hidden="true"></div>
+    <label class="layer-toggle"><input type="checkbox" data-layer="quakes" checked> <span class="layer-dot" style="background:#ff6600"></span>Quakes</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="military"> <span class="layer-dot" style="background:#0088ff"></span>Aircraft ◉</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="wildfire"> <span class="layer-dot" style="background:#ff4444"></span>Hazards ◉</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="satellites"> <span class="layer-dot" style="background:#888"></span>ISS</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="cables"> <span class="layer-dot" style="background:#ff4488"></span>Cables</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="ports"> <span class="layer-dot" style="background:#44ccff"></span>Ports</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="airq"> <span class="layer-dot" style="background:#00cc88"></span>A/Quality</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="quakesMajor"> <span class="layer-dot" style="background:#ff2222"></span>M5+ Only</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="conflict"> <span class="layer-dot" style="background:#ff00aa"></span>Conflicts</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="weatherEvents"> <span class="layer-dot" style="background:#00ffcc"></span>Storms ◉</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="chokepoints"> <span class="layer-dot" style="background:#ff8844"></span>Chokepoints</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="dayNight"> <span class="layer-dot" style="background:#ffcc66"></span>Day/Night</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="datacenters"> <span class="layer-dot" style="background:#ff00cc"></span>AI DC</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="nuclear"> <span class="layer-dot" style="background:#ffcc00"></span>Nuclear</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="bases"> <span class="layer-dot" style="background:#ff5533"></span>Bases</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="spaceports"> <span class="layer-dot" style="background:#bb88ff"></span>Spaceports</label>
+    <div class="layer-divider" aria-hidden="true"></div>
+    <button class="widget-toggle" title="Toggle" data-target="layerBar" aria-label="Collapse layer bar">&#x23FB;</button>
   </div>
 
-  <!-- Global Time Zones -->
-  <div class="tz-panel widget" id="tzPanel" data-widget="tzPanel" data-name="GLOBAL TIME">
-    <button class="widget-toggle" title="Toggle" data-target="tzPanel">&#x23FB;</button>
-    <div class="tz-title">GLOBAL TIME</div>
-    <div class="tz-list" id="tzList"></div>
-  </div>
+  <!-- ================= RIGHT STATUS COLUMN ================= -->
+  <div class="right-col" id="rightCol">
 
-  <!-- System Status -->
-  <div class="sys-panel widget" id="sysPanel" data-widget="sysPanel" data-name="SYSTEM STATUS">
-    <button class="widget-toggle" title="Toggle" data-target="sysPanel">&#x23FB;</button>
-    <div class="sys-title">SYSTEM STATUS</div>
-    <div class="sys-grid">
-      <div class="sys-item"><span class="sys-label">CPU</span><span class="sys-bar" id="cpuBar"><span class="sys-fill" id="cpuFill"></span></span><span class="sys-val" id="cpuVal">--%</span></div>
-      <div class="sys-item"><span class="sys-label">MEM</span><span class="sys-bar" id="memBar"><span class="sys-fill" id="memFill"></span></span><span class="sys-val" id="memVal">--%</span></div>
-      <div class="sys-item"><span class="sys-label">NET</span><span class="sys-bar" id="netBar"><span class="sys-fill" id="netFill"></span></span><span class="sys-val" id="netVal">--ms</span></div>
-      <div class="sys-item"><span class="sys-label">DISK</span><span class="sys-bar" id="diskBar"><span class="sys-fill" id="diskFill"></span></span><span class="sys-val" id="diskVal">--%</span></div>
+    <!-- KPI badges (compact) -->
+    <div class="kpi-row" id="kpiRow">
+      <div class="widget kpi" id="threatLevel" data-widget="threatLevel" data-name="THREAT LEVEL">
+        <button class="widget-toggle" title="Toggle" data-target="threatLevel">&#x23FB;</button>
+        <div class="tl-label">THREAT</div>
+        <div class="tl-badge none" id="tlBadge" title="Waiting for live feeds">NO DATA</div>
+      </div>
+      <div class="widget kpi" id="moonPanel" data-widget="moonPanel" data-name="MOON PHASE">
+        <button class="widget-toggle" title="Toggle" data-target="moonPanel">&#x23FB;</button>
+        <div class="moon-glyph" id="moonPhase"></div>
+      </div>
+      <div class="widget kpi" id="uptimePanel" data-widget="uptimePanel" data-name="UPTIME">
+        <button class="widget-toggle" title="Toggle" data-target="uptimePanel">&#x23FB;</button>
+        <div class="uptime-title">UPTIME</div>
+        <div class="uptime-value" id="uptimeValue">00:00:00</div>
+      </div>
+      <div class="widget kpi" id="satPanel" data-widget="satPanel" data-name="SATELLITES">
+        <button class="widget-toggle" title="Toggle" data-target="satPanel">&#x23FB;</button>
+        <div class="sat-title">SATELLITES</div>
+        <div class="sat-count" id="satCount">—</div>
+        <div class="sat-label">ACTIVE</div>
+      </div>
+      <div class="widget kpi" id="alertPanel" data-widget="alertPanel" data-name="ALERTS">
+        <button class="widget-toggle" title="Toggle" data-target="alertPanel">&#x23FB;</button>
+        <div class="alert-title">ALERTS</div>
+        <div class="alert-count" id="alertCount">0</div>
+      </div>
+    </div>
+
+    <!-- Seismic stats -->
+    <div class="widget panel" id="stats" data-widget="stats" data-name="SEISMIC STATS">
+      <button class="widget-toggle" title="Toggle" data-target="stats">&#x23FB;</button>
+      <div class="panel-head">SEISMIC STATS</div>
+      <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value">Loading...</span></div>
+    </div>
+
+    <!-- Global time -->
+    <div class="widget panel" id="tzPanel" data-widget="tzPanel" data-name="GLOBAL TIME">
+      <button class="widget-toggle" title="Toggle" data-target="tzPanel">&#x23FB;</button>
+      <div class="panel-head blue">GLOBAL TIME</div>
+      <div class="tz-list" id="tzList"></div>
+    </div>
+
+    <!-- World weather -->
+    <div class="widget panel" id="weatherPanel" data-widget="weatherPanel" data-name="WORLD WEATHER">
+      <button class="widget-toggle" title="Toggle" data-target="weatherPanel">&#x23FB;</button>
+      <div class="panel-head cyan">WORLD WEATHER</div>
+      <div class="wx-cities" id="wxCities"></div>
+    </div>
+
+    <!-- System status -->
+    <div class="widget panel" id="sysPanel" data-widget="sysPanel" data-name="SYSTEM STATUS">
+      <button class="widget-toggle" title="Toggle" data-target="sysPanel">&#x23FB;</button>
+      <div class="panel-head amber">SYSTEM STATUS</div>
+      <div class="sys-grid">
+        <div class="sys-item"><span class="sys-label">CPU</span><span class="sys-bar" id="cpuBar"><span class="sys-fill" id="cpuFill"></span></span><span class="sys-val" id="cpuVal">—</span></div>
+        <div class="sys-item"><span class="sys-label">MEM</span><span class="sys-bar" id="memBar"><span class="sys-fill" id="memFill"></span></span><span class="sys-val" id="memVal">—</span></div>
+        <div class="sys-item"><span class="sys-label">NET</span><span class="sys-bar" id="netBar"><span class="sys-fill" id="netFill"></span></span><span class="sys-val" id="netVal">—</span></div>
+        <div class="sys-item"><span class="sys-label">DISK</span><span class="sys-bar" id="diskBar"><span class="sys-fill" id="diskFill"></span></span><span class="sys-val" id="diskVal">—</span></div>
+      </div>
+    </div>
+
+    <!-- Space weather -->
+    <div class="widget panel" id="spacePanel" data-widget="spacePanel" data-name="SPACE WEATHER">
+      <button class="widget-toggle" title="Toggle" data-target="spacePanel">&#x23FB;</button>
+      <div class="panel-head purple">SPACE WEATHER</div>
+      <div class="sp-grid" id="spaceWeather">
+        <div class="sp-row"><span class="sp-label">Kp index</span><span class="sp-val" id="spKp">--</span></div>
+        <div class="sp-row"><span class="sp-label">Solar wind</span><span class="sp-val" id="spWind">-- km/s</span></div>
+        <div class="sp-row"><span class="sp-label">IMF Bz</span><span class="sp-val" id="spProton">-- nT</span></div>
+        <div class="sp-row"><span class="sp-label">Mag field</span><span class="sp-val" id="spMag">-- nT</span></div>
+        <div class="sp-row"><span class="sp-label">F10.7 flux</span><span class="sp-val" id="spFlux">-- sfu</span></div>
+      </div>
+    </div>
+
+    <!-- Feed status -->
+    <div class="widget panel" id="feedPanel" data-widget="feedPanel" data-name="FEED STATUS">
+      <button class="widget-toggle" title="Toggle" data-target="feedPanel">&#x23FB;</button>
+      <div class="panel-head green">FEED STATUS</div>
+      <div class="fp-body" id="feedStatusList"><div class="panel-loading"><div class="skel w-90"></div><div class="skel w-75"></div><div class="skel w-90"></div><div class="skel w-60"></div></div></div>
+    </div>
+
+    <!-- Network I/O -->
+    <div class="widget panel" id="netPanel" data-widget="netPanel" data-name="NETWORK">
+      <button class="widget-toggle" title="Toggle" data-target="netPanel">&#x23FB;</button>
+      <div class="panel-head amber">NETWORK I/O</div>
+      <div class="net-graph" id="netGraph"></div>
+      <div class="net-stats">
+        <span class="net-stat"><span class="net-dot up"></span>TX: <span id="txRate">0</span> KB/s</span>
+        <span class="net-stat"><span class="net-dot down"></span>RX: <span id="rxRate">0</span> KB/s</span>
+      </div>
+    </div>
+
+    <!-- Connected nodes -->
+    <div class="widget panel" id="devicesPanel" data-widget="devicesPanel" data-name="NODES">
+      <button class="widget-toggle" title="Toggle" data-target="devicesPanel">&#x23FB;</button>
+      <div class="panel-head blue">CONNECTED NODES</div>
+      <div class="devices-list" id="devicesList"></div>
     </div>
   </div>
 
-  <!-- Threat Level -->
-  <div class="threat-level widget" id="threatLevel" data-widget="threatLevel" data-name="THREAT LEVEL">
-    <button class="widget-toggle" title="Toggle" data-target="threatLevel">&#x23FB;</button>
-    <div class="tl-label">THREAT LEVEL</div>
-    <div class="tl-badge" id="tlBadge">ELEVATED</div>
-  </div>
+  <!-- ================= BOTTOM DOCK (logs) ================= -->
+  <div class="bottom-dock" id="bottomDock">
 
-  <!-- Uptime Counter -->
-  <div class="uptime-panel widget" id="uptimePanel" data-widget="uptimePanel" data-name="UPTIME">
-    <button class="widget-toggle" title="Toggle" data-target="uptimePanel">&#x23FB;</button>
-    <div class="uptime-title">UPTIME</div>
-    <div class="uptime-value" id="uptimeValue">00:00:00</div>
-  </div>
+    <!-- Live world events log -->
+    <div class="widget events-panel" id="eventsPanel" data-widget="eventsPanel" data-name="WORLD EVENTS">
+      <button class="widget-toggle" title="Toggle" data-target="eventsPanel">&#x23FB;</button>
+      <div class="ev-title">WORLD EVENTS <span class="ev-live">● LIVE</span></div>
+      <div class="ev-body" id="eventsLog"></div>
+    </div>
 
-  <!-- Satellites -->
-  <div class="sat-panel widget" id="satPanel" data-widget="satPanel" data-name="SATELLITES">
-    <button class="widget-toggle" title="Toggle" data-target="satPanel">&#x23FB;</button>
-    <div class="sat-title">SATELLITES</div>
-    <div class="sat-count" id="satCount">--</div>
-    <div class="sat-label">ACTIVE</div>
-  </div>
-
-  <!-- Alert Counter -->
-  <div class="alert-panel widget" id="alertPanel" data-widget="alertPanel" data-name="ALERTS">
-    <button class="widget-toggle" title="Toggle" data-target="alertPanel">&#x23FB;</button>
-    <div class="alert-title">ALERTS TODAY</div>
-    <div class="alert-count" id="alertCount">0</div>
-  </div>
-
-  <!-- Network Activity Graph -->
-  <div class="net-panel widget" id="netPanel" data-widget="netPanel" data-name="NETWORK">
-    <button class="widget-toggle" title="Toggle" data-target="netPanel">&#x23FB;</button>
-    <div class="net-title">NETWORK I/O</div>
-    <div class="net-graph" id="netGraph"></div>
-    <div class="net-stats">
-      <span class="net-stat"><span class="net-dot up"></span>TX: <span id="txRate">0</span> KB/s</span>
-      <span class="net-stat"><span class="net-dot down"></span>RX: <span id="rxRate">0</span> KB/s</span>
+    <!-- Threat log -->
+    <div class="widget threat-panel" id="threatPanel" data-widget="threatPanel" data-name="THREAT LOG">
+      <button class="widget-toggle" title="Toggle" data-target="threatPanel">&#x23FB;</button>
+      <div class="threat-header">THREAT LOG</div>
+      <div class="threat-body" id="threatLog"></div>
     </div>
   </div>
 
-  <!-- Connected Devices -->
-  <div class="devices-panel widget" id="devicesPanel" data-widget="devicesPanel" data-name="NODES">
-    <button class="widget-toggle" title="Toggle" data-target="devicesPanel">&#x23FB;</button>
-    <div class="devices-title">CONNECTED NODES</div>
-    <div class="devices-list" id="devicesList"></div>
+  <!-- ================= TIMELINE ================= -->
+  <div class="timeline-bar widget" id="timelinePanel" data-widget="timelinePanel" data-name="TIMELINE">
+    <button class="widget-toggle" title="Toggle" data-target="timelinePanel">&#x23FB;</button>
+    <button class="tl-play" id="timelinePlay" title="Play/Pause" aria-label="Play or pause timeline">▶</button>
+    <input type="range" class="tl-range" id="timelineRange" min="0" max="100" value="100" aria-label="Timeline scrubber">
+    <span class="timeline-label" id="timelineLabel">NOW — last 24h</span>
   </div>
 
-  <!-- Threat Log -->
-  <div class="threat-panel widget" id="threatPanel" data-widget="threatPanel" data-name="THREAT LOG">
-    <button class="widget-toggle" title="Toggle" data-target="threatPanel">&#x23FB;</button>
-    <div class="threat-header">THREAT LOG</div>
-    <div class="threat-body" id="threatLog"></div>
-  </div>
-
-  <!-- News Ticker -->
+  <!-- ================= TICKERS ================= -->
   <div class="news-ticker-wrap widget" id="newsTickerWrap" data-widget="newsTicker" data-name="BREAKING NEWS">
     <button class="widget-toggle" title="Toggle" data-target="newsTicker">&#x23FB;</button>
     <span class="news-label">BREAKING</span>
     <div class="news-ticker"><div class="news-track" id="newsTrack"></div></div>
   </div>
 
-  <!-- Earthquake Ticker -->
   <div class="ticker-wrap widget" id="quakeTickerWrap" data-widget="quakeTicker" data-name="QUAKE TICKER">
     <button class="widget-toggle" title="Toggle" data-target="quakeTicker">&#x23FB;</button>
     <div class="ticker" id="ticker"></div>
   </div>
 
+  <!-- ================= EARTH CAM (Himawari-8 live imagery) ================= -->
+  <div class="earthcam-panel widget" id="earthCamPanel" data-widget="earthCamPanel" data-name="EARTH CAM">
+    <button class="widget-toggle" title="Toggle" data-target="earthCamPanel" aria-label="Collapse Earth Cam">&#x23FB;</button>
+    <div class="cam-title">EARTH CAM <span class="cam-src" id="earthCamSrc">HIMAWARI-8</span></div>
+    <div class="cam-frame" id="earthCamFrame"><img class="cam-img" id="earthCamImg" alt="Himawari-8 Earth imagery"></div>
+    <div class="cam-meta" id="earthCamMeta" aria-live="polite">loading…</div>
+    <button class="cam-play" id="earthCamPlay" title="Time-lapse" aria-label="Play time-lapse">▶</button>
+  </div>
+
+  <!-- ================= COMMAND PALETTE (Ctrl+K) ================= -->
+  <div class="palette" id="palette" hidden>
+    <input class="palette-input" id="paletteInput" placeholder="Search tabs, layers, countries, widgets…  (Ctrl+K)" autocomplete="off" aria-label="Command palette search">
+    <div class="palette-results" id="paletteResults"></div>
+  </div>
+
+  <!-- ================= COUNTRY RISK MODAL ================= -->
+  <div class="modal-overlay" id="riskModal" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div class="modal-close" id="riskModalClose" role="button" tabindex="0" aria-label="Close dialog">&#x2715;</div>
+      <div class="modal-title" id="riskModalTitle"></div>
+      <div class="modal-scores" id="riskModalScores"></div>
+      <div class="modal-domains" id="riskModalDomains"></div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="monitor.js"></script>
+  <script type="module" src="src/monitor/main.js"></script>
 </body>
 </html>

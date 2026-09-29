@@ -1,5 +1,14 @@
-node_modules/ 
-.vscode/ 
-*.log 
-.claude/ 
-dist/ 
+node_modules/
+.vscode/
+*.log
+.claude/
+
+# build output
+dist/
+
+# local-only tooling / artifacts — kept on disk, never published
+.freebuff/
+_asarcheck/
+.qoder/
+.qodo/
+.agents/
