@@ -1404,6 +1404,17 @@ function registerHandlers() {
     });
   }
 
+  /* Every button except close leaves the floating bar on screen. If the window
+     is gone (closed earlier, or never opened in this session) it is rebuilt
+     rather than ignored, so "minimize" is never a dead click; only the close
+     button is allowed to take the bar away. Returns true when the caller
+     should stop, because the bar is only just being created. */
+  function reopenBarIfMissing(expand) {
+    if (alive(pipWin)) return false;
+    openPip(expand ? {} : { expand: false });
+    return true;
+  }
+
   ipcMain.on("pip:open", () => openPip());
   /* The floating BAR, docked to one side, right now. Used on launch and when
      the main window is minimized — the user gets the bar immediately instead
@@ -1451,7 +1462,13 @@ function registerHandlers() {
      Maximized is a real app-window state: full work-area bounds, no always-on-
      top so other windows can come forward, plus a taskbar entry. */
   ipcMain.on("pip:maximize", () => {
-    if (!pipWin || pipWin.isDestroyed() || pipCollapsed) return;
+    if (!alive(pipWin)) {
+      // Rebuild the popup, then maximise it once it has loaded.
+      const w = openPip();
+      if (alive(w)) w.webContents.once("did-finish-load", () => { if (alive(pipWin)) ipcMain.emit("pip:maximize"); });
+      return;
+    }
+    if (pipCollapsed) return;
     if (pipMaximized) {
       pipMaximized = false;
       const back = pipPreMaxBounds || expandedPipBounds();
@@ -1470,7 +1487,9 @@ function registerHandlers() {
   /* Dock the collapsed bar to a screen edge (Settings → Dock to). */
   ipcMain.on("pip:dock", (e, side) => {
     const s = side === "left" ? "left" : "right";
-    if (!pipWin || pipWin.isDestroyed() || !pipCollapsed) return;
+    // Docking with no bar open builds one on that edge directly.
+    if (!alive(pipWin)) { openPip({ expand: false, dock: s }); return; }
+    if (!pipCollapsed) return;
     const t = dockPipBounds(s);
     animatePipBounds(t, 160);
     savePipCfg({ x: t.x, y: t.y });
@@ -1531,7 +1550,8 @@ function registerHandlers() {
   ipcMain.on("pip:resize", () => {
     // Bubble-size slider changed in Settings — resize the pill in place,
     // keeping its centre fixed so it doesn't jump around.
-    if (!pipWin || pipWin.isDestroyed() || !pipCollapsed) return;
+    if (reopenBarIfMissing(false)) return;
+    if (!pipCollapsed) return;
     const b = pipWin.getBounds();
     const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
     const s = pipBubbleSize();
@@ -1544,6 +1564,9 @@ function registerHandlers() {
   });
 
   ipcMain.on("pip:flip", () => {
+    // Flipping with no bar open just brings the bar back (in the orientation
+    // pip.json remembers) instead of flipping something that isn't there.
+    if (reopenBarIfMissing(false)) return;
     pipVertical = !pipVertical;
     savePipCfg({ vertical: pipVertical });
     if (pipWin && !pipWin.isDestroyed()) {
@@ -1563,7 +1586,8 @@ function registerHandlers() {
   });
 
   ipcMain.on("pip:expand", () => {
-    if (!pipWin || pipWin.isDestroyed()) return;
+    // "Open the chat" must open it even if the window was closed meanwhile.
+    if (reopenBarIfMissing(true)) return;
     if (pipCollapsed) {
       lastBubblePos = pipWin.getPosition();
       pipCollapsed = false;
@@ -1594,7 +1618,9 @@ function registerHandlers() {
   });
 
   ipcMain.on("pip:collapse", () => {
-    if (!pipWin || pipWin.isDestroyed()) return;
+    /* Minimize lands on the floating bar even when there is no window to shrink
+       — the bar is rebuilt rather than silently doing nothing. */
+    if (reopenBarIfMissing(false)) return;
     if (pipMaximized) {
       pipMaximized = false;
       pipPreMaxBounds = null;

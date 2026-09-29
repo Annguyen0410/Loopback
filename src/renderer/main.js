@@ -26,6 +26,8 @@ import { initCapture } from "./capture.js";
 import { initGallery, closeGallery } from "./gallery.js";
 import { initRecPrefs, closeRecPrefs, syncRecPrefsUi } from "./recprefs.js";
 import { renderConvList, initSidebar } from "./sidebar.js";
+import { initTips } from "./tip.js";
+import { initSectionResize } from "./panelsize.js";
 
 function closeAll() {
   ["ctxMenu", "reactionPicker", "emojiPicker", "themePicker", "editModal", "attachPopover"].forEach(id => {
@@ -80,9 +82,23 @@ function closeEscapeTargets() {
   return closed;
 }
 
+/* The side panels and the whiteboard live OUTSIDE .app so that they stay up
+   when the window shrinks to the bubble — which is precisely how the floating
+   bar used to "disappear" after pressing minimize: a 340px panel left open
+   covers the 56×248 window it just shrank into. Minimizing puts them away
+   first, so what the user asked for (the bar) is what they see. */
+function closeFloatingOverlays() {
+  closeGallery();
+  closeRecPrefs();
+  closeCanvas();
+  const sp = $("settingsPanel");
+  if (sp) sp.hidden = true;
+}
+
 function collapsePip() {
   // Both sides flip in the same tick: the renderer paints the bar and the main
   // process shrinks the window instantly (no intermediate half-size window).
+  closeFloatingOverlays();
   document.body.classList.add("pip-collapsed");
   document.body.classList.remove("pip-max");
   if (window.api && window.api.pip) window.api.pip.collapse();
@@ -111,7 +127,12 @@ function initPipMode() {
   // Main can force expand/collapse (rail toggle) — keep body class in sync.
   const applyPipState = s => {
     if (s === "expanded") document.body.classList.remove("pip-collapsed");
-    else if (s === "collapsed") document.body.classList.add("pip-collapsed");
+    else if (s === "collapsed") {
+      // Collapsing from anywhere (rail toggle, launch, Esc) also puts the side
+      // panels away — they are painted over the bubble, not inside .app.
+      closeFloatingOverlays();
+      document.body.classList.add("pip-collapsed");
+    }
   };
   if (api && api.pip && api.pip.onState) api.pip.onState(applyPipState);
   /* The push above is sent when the window finishes loading, which can be
@@ -403,6 +424,8 @@ onReady(async () => {
   initGallery();
   initRecPrefs();
   initSidebar({ createChat, renameChat, deleteChat, toggleChatPin, selectChat });
+  initSectionResize();
+  initTips();
   initGlobalKeys();
 
   /* First paint */

@@ -1,5 +1,29 @@
 # Cleanup & Verification Log
 
+## v1.3.9 — Vòng sửa UI: nút floating bar, section kéo co giãn, theme
+
+### Bối cảnh (bạn yêu cầu)
+1. Mở lại màn hình từ floating bar: mấy nút dễ bấm nhầm (thu nhỏ / tắt) và cảm giác “mất luôn floating bar” → cần tooltip nói rõ từng nút, và trừ nút tắt ra thì các nút khác phải luôn để lại floating bar; đã tắt thì vào app bấm nút floating bar vẫn dựng lại được.
+2. Nút tròn “Show chats” vẫn hiện cả khi danh sách chat đang mở → khi section mở thì không hiện nút đó.
+3. Các section phải kéo ra/vô được tuỳ ý.
+4. Theme phải đẹp hơn.
+
+### Đã sửa
+- **Tooltip tự viết** (`src/renderer/tip.js`): `data-tip` (câu mô tả đầy đủ) hoặc `title` → hiện bong bóng giải thích sau 200ms, tự lật lên/xuống, luôn nằm trong cửa sổ; khi hiện thì **ẩn `title` gốc** rồi trả lại y nguyên lúc rời chuột (hudtest đọc `title` của 5 nút bubble nên không được xoá). Trong bubble thu gọn (56px) **không** hiện tooltip — ở đó để `title` cho OS vẽ ra ngoài cửa sổ. Gắn mô tả cho **38 nút**: 8 nút header popup, 5 nút bubble, 7 nút rail, composer, sidebar, header panel.
+- **Nút ✕ là nút duy nhất “phá” floating bar**: `#btnPipClose` được tô đỏ khi hover (`.danger-btn`), và 6 handler trong `main.js` (`pip:collapse`, `pip:expand`, `pip:resize`, `pip:dock`, `pip:flip`, `pip:maximize`) giờ **dựng lại bar nếu cửa sổ đã bị đóng** thay vì im lặng không làm gì → “thu nhỏ” không bao giờ là cú click chết; đóng thì `pip:close` vẫn đưa cửa sổ chat về như cũ.
+- **Nguyên nhân thật của “mất luôn floating bar”**: các panel (Media library / Recording / Settings) và whiteboard nằm **ngoài `.app`** (z-index 250) nên khi cửa sổ thu về 56×248, panel vẫn phủ lên trên → nhìn như bar biến mất. Nay `collapsePip()` và `pip:state = collapsed` **đóng hết panel trước**, kèm CSS chặn cứng `body.pip-mode.pip-collapsed .settings-panel/.canvas-panel{display:none!important}`.
+- **Nút “Show chats”** (`sidebar.js`): thêm class `sidebar-open` tính từ trạng thái thật (`MutationObserver` trên class của `body` + `matchMedia(720px)`) thay vì chỉ dựa vào `sidebar-collapsed`; CSS `body.sidebar-open .sb-reopen{display:none!important}` → nút chỉ còn khi danh sách chat **không** hiện, kể cả trong popup nổi (nơi danh sách tự hiện từ 720px).
+- **Kéo co giãn section** (`src/renderer/panelsize.js` + grip trong `index.html`/`styles.css`): sidebar (tay phải), Media library / Recording / Settings (tay trái). Kéo bằng pointer (không cần OS edge-drag), clamp theo cửa sổ, lưu vào `settings.json` (`sidebarWidth`, `mediaPanelWidth`, `miniPanelWidth`, `settingsPanelWidth`), double-click tay kéo = về mặc định, resize cửa sổ thì tự clamp lại. Kích thước đặt bằng CSS var (`--sb-w`, `--w-media`…) chứ không inline để `body.sidebar-collapsed` và media query 440px vẫn thắng.
+- **Theme** (`styles.css`): 16 theme có bubble gradient **đậm/rực hơn** (mọi stop đều ≥4.6:1 với chữ trắng — đã đo trước khi chọn màu) + **wallpaper cho cả 16 theme ở cả light lẫn dark** (glow theo hue theme + gradient nền), wallpaper dời từ cột `.messages` (780px) sang nguyên `.chat` nên nền chạy hết chiều ngang; thêm bóng bubble, header kính mờ, shadow panel theo accent, viền tab active.
+- **Hai bug thật phát hiện trong lúc sửa**: `--chat-wall` và `--focus-ring` từng khai báo ở `:root` nhưng lại tham chiếu `var(--accent)` (định nghĩa ở `body`) → custom property đó **compute thành guaranteed-invalid và mất trắng**: theme mặc định (blue) không có wallpaper, và **focus ring bàn phím không hề hiện**. Đã dời cả hai sang block `body` (nơi có `--accent`).
+
+### Kiểm chứng (đều chạy thật)
+- [x] `uitest.js` (suite mới, 24 check): tooltip hiện/đúng vị trí/trả lại `title`; nút Show chats ẩn-hiện đúng theo trạng thái; kéo sidebar 300→390 và media panel 360→440, cả hai ghi vào `settings.json`; minimize khi đang mở panel → bar 56×248 + panel đã đóng; close là nút duy nhất làm mất bar; **`pip:collapse` sau khi đã close vẫn dựng lại bar**; 32 tổ hợp theme/mode đều có wallpaper 2 lớp; cột tin nhắn trong suốt; focus ring vẽ ra thật → **RESULT PASS**.
+- [x] `audittest.js` PASS: 32 tổ hợp theme giữ contrast (xấu nhất `onSolid` 4.51, bubble 4.6), 106 id DOM đều tồn tại, 65 đường `api.*` đều có trên bridge, 0 console error, không `error.log`.
+- [x] `piptest.js` PASS toàn bộ (drag, expand, collapse cùng tick, resize/flip giữ tâm, minimize → bar, mở lại app).
+- [x] `combotest.js` **RESULT PASS** (không có dòng FAIL nào). `hudtest.js`, `menutest.js` PASS (5 nút bubble vẫn đủ `title`, panel 320×420 vẫn không cắt chữ).
+- [ ] **Chưa build lại exe** — bạn chưa yêu cầu; `package.json` vẫn đang là **1.3.9**. Khi cần: bump version → `npx electron-builder --win` → cài đè (`appId` từ 1.3.9 giữ nguyên nên cài đè tại chỗ được).
+
 ## v1.3.9 — Đổi tên app: *Messenger Self-Chat* → **Loopback**
 
 ### Bối cảnh (bạn yêu cầu)

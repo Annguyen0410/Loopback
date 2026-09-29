@@ -13,10 +13,9 @@ input,textarea{font:inherit;-webkit-user-select:text;user-select:text}
   --accent-key:#0084ff;--accent-mix:68%;
   --bg-primary:#fbfbfc;--bg-secondary:#f1f2f4;--bg-tertiary:#e7e8ec;
   --text-primary:#14161a;--text-secondary:#5d6772;--border:#e3e5e9;
-  --bubble-me:linear-gradient(180deg,#3a79b5 0%,#31699f 100%);
+  --bubble-me:linear-gradient(180deg,#2f6dbf 0%,#22558f 100%);
   --bubble-other:#e7e8ec;--shadow:0 1px 2px rgba(0,0,0,.08);
   --rail-bg:#25272b;--rail-hover:#33363a;--hover-bg:#ecedf0;
-  --focus-ring:0 0 0 3px color-mix(in srgb,var(--accent) 30%,transparent);
   --panel-shadow:0 8px 32px rgba(0,0,0,.10);
   --radius-sm:8px;--radius-md:12px;--radius-lg:16px;
   --t-fast:.15s ease;--t:.25s ease;
@@ -36,47 +35,70 @@ body{
   --on-accent:#0a0c0f;
   --accent-solid:var(--accent);
   --pill-shift:#ffffff;
+  /* Wallpaper behind the conversation: an ambient glow in the theme hue over a
+     soft gradient. Layered in ONE custom property so a theme (and its dark
+     variant) can repaint the whole chat with a single declaration. It lives
+     HERE, not on :root — a custom property that references --accent has to sit
+     on the element that defines --accent, or it computes to the
+     guaranteed-invalid value and paints nothing at all. */
+  --chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 17%,transparent),transparent 62%),linear-gradient(180deg,#f7fafd 0%,#e9f0f9 100%);
+  /* Keyboard focus ring. Same rule as --chat-wall above: it derives from
+     --accent, so :root would compute it away and leave every focused control
+     with no visible outline at all. */
+  --focus-ring:0 0 0 3px color-mix(in srgb,var(--accent) 30%,transparent);
 }
 body.dark{
   --accent-mix:64%;
   --bg-primary:#1a1b1d;--bg-secondary:#252729;--bg-tertiary:#3b3d40;
   --text-primary:#e3e5e9;--text-secondary:#a7acb3;--border:#34363a;
+  --chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 26%,transparent),transparent 62%),linear-gradient(180deg,#121924 0%,#0c121a 100%);
   --bubble-other:#33363a;--shadow:0 1px 2px rgba(0,0,0,.28);--hover-bg:#2c2e31;
   --panel-shadow:0 8px 32px rgba(0,0,0,.42);
   background:#1a1b1d;color:#e3e5e9;
 }
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:none;box-shadow:var(--focus-ring)}
-body.theme-purple{--accent-key:#a855f7;--bubble-me:linear-gradient(180deg,#8266b9,#6b52a3)}
-body.theme-pink{--accent-key:#ec4899;--accent-mix:62%;--bubble-me:linear-gradient(180deg,#b25780,#a04672)}
-body.theme-green{--accent-key:#22c55e;--bubble-me:linear-gradient(180deg,#41825a,#3d7c56)}
-body.theme-orange{--accent-key:#f97316;--accent-mix:62%;--bubble-me:linear-gradient(180deg,#a5663b,#a0613a)}
-body.theme-red{--accent-key:#ef4444;--accent-mix:62%;--bubble-me:linear-gradient(180deg,#b85858,#9f4646);--on-accent:#ffffff;--pill-shift:#0a0c0f;--accent-solid:color-mix(in srgb,var(--accent) 88%,#0a0c0f)}
-body.theme-teal{--accent-key:#14b8a6;--accent-mix:64%;--bubble-me:linear-gradient(180deg,#34817a,#337e77)}
-body.theme-gradient{--accent-key:#667eea;--bubble-me:linear-gradient(135deg,#6872a7,#6b5aa0)}
+/* Every bubble gradient is DEEP and saturated. The stops must clear AA (4.5:1)
+   against the white text inside a bubble — audittest measures exactly that —
+   so a theme earns its punch from saturation, never from washing the hue out.
+   The walls run light here and are re-toned for dark mode further down. */
+body.theme-purple{--accent-key:#a855f7;--bubble-me:linear-gradient(180deg,#7c3aed,#5b21b6);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 20%,transparent),transparent 62%),linear-gradient(180deg,#f9f5ff 0%,#ece3fc 100%)}
+body.theme-pink{--accent-key:#ec4899;--accent-mix:62%;--bubble-me:linear-gradient(180deg,#db2777,#9d174d);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 62%),linear-gradient(180deg,#fdf3f9 0%,#fbe2ee 100%)}
+body.theme-green{--accent-key:#22c55e;--bubble-me:linear-gradient(180deg,#157f3c,#0e6b32);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 62%),linear-gradient(180deg,#f3fbf5 0%,#e3f5ea 100%)}
+body.theme-orange{--accent-key:#f97316;--accent-mix:62%;--bubble-me:linear-gradient(180deg,#c2410c,#9a3412);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 17%,transparent),transparent 62%),linear-gradient(180deg,#fff6ef 0%,#fde7d9 100%)}
+body.theme-red{--accent-key:#ef4444;--accent-mix:62%;--bubble-me:linear-gradient(180deg,#dc2626,#991b1b);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 62%),linear-gradient(180deg,#fef5f5 0%,#fbe4e4 100%);--on-accent:#ffffff;--pill-shift:#0a0c0f;--accent-solid:color-mix(in srgb,var(--accent) 88%,#0a0c0f)}
+body.theme-teal{--accent-key:#14b8a6;--accent-mix:64%;--bubble-me:linear-gradient(180deg,#0f766e,#115e59);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 62%),linear-gradient(180deg,#f1fbfa 0%,#e0f4f1 100%)}
+body.theme-gradient{--accent-key:#667eea;--bubble-me:linear-gradient(135deg,#4f46e5,#6d28d9);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 20%,transparent),transparent 62%),linear-gradient(180deg,#f6f7ff 0%,#eae8fe 100%)}
 
 /* ===== Extra themes ===== */
-body.theme-sunset{--accent-key:#ff6b5e;--accent-mix:62%;--bubble-me:linear-gradient(135deg,#9f6758,#8a705b);--chat-wall:linear-gradient(180deg,#f7f0ea 0%,#efe1d8 100%)}
-body.theme-ocean{--accent-key:#2193b0;--bubble-me:linear-gradient(135deg,#3c7d98,#4c7c8a);--chat-wall:linear-gradient(180deg,#eef4f7 0%,#dce9ee 100%)}
-body.theme-forest{--accent-key:#1f9e6e;--bubble-me:linear-gradient(135deg,#31505a,#567e68);--chat-wall:linear-gradient(180deg,#eef4f0 0%,#ddeade 100%)}
-body.theme-candy{--accent-key:#e06b7e;--accent-mix:64%;--bubble-me:linear-gradient(135deg,#9d666f,#8d6e67);--chat-wall:linear-gradient(180deg,#f8f1f3 0%,#f0e3e6 100%)}
-body.theme-mono{--accent-key:#5b5b5b;--bubble-me:linear-gradient(135deg,#4a4a4a,#1e1e1e);--chat-wall:linear-gradient(180deg,#f4f4f5 0%,#e9e9ea 100%);--on-accent:#ffffff;--pill-shift:#0a0c0f}
-body.theme-galaxy{--accent-key:#7c6cf0;--bubble-me:linear-gradient(135deg,#3b3563,#1c1833);--chat-wall:linear-gradient(180deg,#f1eef8 0%,#e4dff0 100%)}
-body.theme-aurora{--accent-key:#0ea5a0;--accent-mix:62%;--bubble-me:linear-gradient(135deg,#337f7d,#498068);--chat-wall:linear-gradient(120deg,#e0f1ea,#d3ebdf,#dcefec)}
-body.theme-coffee{--accent-key:#8a6642;--bubble-me:linear-gradient(135deg,#5f3f26,#80726c);--chat-wall:linear-gradient(180deg,#f6f1ea 0%,#eee4d8 100%);--on-accent:#ffffff;--pill-shift:#0a0c0f}
+body.theme-sunset{--accent-key:#ff6b5e;--accent-mix:62%;--bubble-me:linear-gradient(135deg,#c2410c,#9d174d);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 17%,transparent),transparent 62%),linear-gradient(180deg,#fff6f1 0%,#fde5de 100%)}
+body.theme-ocean{--accent-key:#2193b0;--bubble-me:linear-gradient(135deg,#0e7490,#155e75);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 62%),linear-gradient(180deg,#f1f9fc 0%,#e0eef5 100%)}
+body.theme-forest{--accent-key:#1f9e6e;--bubble-me:linear-gradient(135deg,#0f766e,#166534);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 62%),linear-gradient(180deg,#f1fbf4 0%,#e0f4e8 100%)}
+body.theme-candy{--accent-key:#e06b7e;--accent-mix:64%;--bubble-me:linear-gradient(135deg,#be3455,#8f2b4b);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 62%),linear-gradient(180deg,#fef3f6 0%,#fbe2e9 100%)}
+body.theme-mono{--accent-key:#5b5b5b;--bubble-me:linear-gradient(135deg,#4b5563,#1f2937);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 14%,transparent),transparent 62%),linear-gradient(180deg,#f8f8f9 0%,#ebebee 100%);--on-accent:#ffffff;--pill-shift:#0a0c0f}
+body.theme-galaxy{--accent-key:#7c6cf0;--bubble-me:linear-gradient(135deg,#4c1d95,#1e1b4b);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 62%),linear-gradient(180deg,#f7f5ff 0%,#e9e4fc 100%)}
+body.theme-aurora{--accent-key:#0ea5a0;--accent-mix:62%;--bubble-me:linear-gradient(135deg,#047857,#0f766e);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 20%,transparent),transparent 62%),linear-gradient(120deg,#f0fbf7 0%,#ddf3ec 55%,#ecfaf5 100%)}
+body.theme-coffee{--accent-key:#8a6642;--bubble-me:linear-gradient(135deg,#92603a,#6b3f2a);--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 62%),linear-gradient(180deg,#fbf6f0 0%,#f1e7da 100%);--on-accent:#ffffff;--pill-shift:#0a0c0f}
 
 /* Animated aurora wallpaper */
-body.theme-aurora .messages{background-size:300% 300%;animation:auroraShift 18s ease infinite}
+body.theme-aurora .chat{background-size:300% 300%;animation:auroraShift 18s ease infinite}
 @keyframes auroraShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
 
 /* Dark-mode wallpapers stay subtle instead of glaring white gradients */
-body.dark.theme-sunset{--chat-wall:linear-gradient(180deg,#2a1a12 0%,#241309 100%)}
-body.dark.theme-ocean{--chat-wall:linear-gradient(180deg,#0e1f28 0%,#0a1a22 100%)}
-body.dark.theme-forest{--chat-wall:linear-gradient(180deg,#10201a 0%,#0c1c14 100%)}
-body.dark.theme-candy{--chat-wall:linear-gradient(180deg,#261219 0%,#1f0e14 100%)}
-body.dark.theme-mono{--chat-wall:linear-gradient(180deg,#202020 0%,#161616 100%)}
-body.dark.theme-galaxy{--chat-wall:linear-gradient(180deg,#181430 0%,#120e24 100%)}
-body.dark.theme-aurora{--chat-wall:linear-gradient(120deg,#0c2420,#0e2a22,#0b201f)}
-body.dark.theme-coffee{--chat-wall:linear-gradient(180deg,#221812 0%,#1a1009 100%)}
+body.dark.theme-purple{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 26%,transparent),transparent 60%),linear-gradient(180deg,#181329 0%,#110d1f 100%)}
+body.dark.theme-pink{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 26%,transparent),transparent 60%),linear-gradient(180deg,#1f1118 0%,#180d13 100%)}
+body.dark.theme-green{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 60%),linear-gradient(180deg,#0e1a13 0%,#0a140e 100%)}
+body.dark.theme-orange{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 60%),linear-gradient(180deg,#1f1410 0%,#180f0b 100%)}
+body.dark.theme-red{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 60%),linear-gradient(180deg,#1f1212 0%,#180d0d 100%)}
+body.dark.theme-teal{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 60%),linear-gradient(180deg,#0d1a19 0%,#091412 100%)}
+body.dark.theme-gradient{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 26%,transparent),transparent 60%),linear-gradient(180deg,#13142b 0%,#0d0e21 100%)}
+body.dark.theme-sunset{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 60%),linear-gradient(180deg,#241510 0%,#1b0f0b 100%)}
+body.dark.theme-ocean{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 60%),linear-gradient(180deg,#0d1a22 0%,#09131a 100%)}
+body.dark.theme-forest{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 60%),linear-gradient(180deg,#0d1a14 0%,#09140f 100%)}
+body.dark.theme-candy{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 60%),linear-gradient(180deg,#1f1216 0%,#190e11 100%)}
+body.dark.theme-mono{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 20%,transparent),transparent 60%),linear-gradient(180deg,#1e1e1f 0%,#171718 100%)}
+body.dark.theme-galaxy{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 28%,transparent),transparent 60%),linear-gradient(180deg,#151131 0%,#100c27 100%)}
+body.dark.theme-aurora{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 26%,transparent),transparent 60%),linear-gradient(120deg,#0b1f1b 0%,#081714 55%,#0a1d19 100%)}
+body.dark.theme-coffee{--chat-wall:radial-gradient(115% 68% at 12% -14%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 60%),linear-gradient(180deg,#1f1612 0%,#18100b 100%)}
 
 /* ===== Layout ===== */
 .app{display:flex;height:100vh;background:var(--bg-primary);position:relative;flex-direction:row}
@@ -109,13 +131,20 @@ body.dark.theme-coffee{--chat-wall:linear-gradient(180deg,#221812 0%,#1a1009 100
 .av-3{background:linear-gradient(135deg,#fc466b,#3f5efb)}
 
 /* ===== Sidebar ===== */
-.sidebar{width:300px;min-width:0;background:var(--bg-primary);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:width .22s cubic-bezier(.4,0,.2,1),min-width .22s cubic-bezier(.4,0,.2,1),opacity .16s ease,background .3s}
+.sidebar{position:relative;width:var(--sb-w,300px);min-width:0;background:var(--bg-primary);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:width .22s cubic-bezier(.4,0,.2,1),min-width .22s cubic-bezier(.4,0,.2,1),opacity .16s ease,background .3s}
+/* While the pointer is on the resize grip the transition would fight the drag. */
+body.resizing .sidebar{transition:none}
 .sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 8px 16px}
 .sidebar-header h2{font-size:18px;font-weight:700;color:var(--text-primary);letter-spacing:-.3px}
 .sidebar-actions{display:flex;gap:2px}
 body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right:none;opacity:0;pointer-events:none}
 .sb-reopen{display:none;position:fixed;left:70px;top:50%;transform:translateY(-50%);z-index:60;background:var(--bg-primary);border:1px solid var(--border);box-shadow:var(--shadow)}
 body.sidebar-collapsed .sb-reopen{display:grid}
+/* The round "Show chats" button belongs on screen only while the list is NOT.
+   `sidebar-open` is kept in step by sidebar.js with what is really rendered —
+   which includes the floating popup, where the conversation list appears from
+   720px up even if the collapsed flag is still stored in settings. */
+body.sidebar-open .sb-reopen{display:none!important}
 
 .icon-btn{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--text-secondary);transition:background var(--t-fast),color var(--t-fast),transform var(--t-fast)}
 .icon-btn:hover{background:var(--hover-bg);color:var(--text-primary)}
@@ -142,7 +171,7 @@ body.sidebar-collapsed .sb-reopen{display:grid}
 .conv-item{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:10px;cursor:pointer;transition:background var(--t-fast),transform var(--t-fast)}
 .conv-item:hover{background:var(--hover-bg)}
 .conv-item:active{transform:scale(.99)}
-.conv-item.active{background:color-mix(in srgb,var(--accent) 10%,transparent);box-shadow:inset 2.5px 0 0 var(--accent)}
+.conv-item.active{background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:inset 2.5px 0 0 var(--accent),0 2px 12px color-mix(in srgb,var(--accent) 14%,transparent)}
 .conv-item.active:hover{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 .conv-body{flex:1;min-width:0}
 .conv-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
@@ -176,8 +205,11 @@ body.sidebar-collapsed .sb-reopen{display:grid}
 .sr-snippet{font-size:12.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
 
 /* ===== Chat ===== */
-.chat{flex:1;min-width:0;background:var(--bg-primary);display:flex;flex-direction:column;position:relative;transition:background .3s}
-.chat-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg-primary);transition:background var(--t);box-shadow:0 1px 0 rgba(0,0,0,.02)}
+/* The theme's wallpaper lives on the WHOLE chat column, not on the 780px
+   message strip, so a themed window looks painted edge to edge instead of
+   showing a coloured ribbon with grey margins on both sides. */
+.chat{flex:1;min-width:0;background-color:var(--bg-primary);background-image:var(--chat-wall);background-repeat:no-repeat;background-size:100% 100%;display:flex;flex-direction:column;position:relative;transition:background-color .3s}
+.chat-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--bg-primary) 88%,transparent);backdrop-filter:blur(8px);transition:background var(--t);box-shadow:0 1px 0 rgba(0,0,0,.03),0 6px 18px color-mix(in srgb,var(--accent) 6%,transparent)}
 .chat-header-info{display:flex;align-items:center;gap:12px;cursor:pointer;flex:1;min-width:0}
 .chat-header-text{display:flex;flex-direction:column}
 .chat-name{font-weight:600;font-size:15px;color:var(--text-primary)}
@@ -198,7 +230,7 @@ body.sidebar-collapsed .sb-reopen{display:grid}
 .search-count{font-size:12px;color:var(--text-secondary);white-space:nowrap;min-width:50px;text-align:center}
 
 /* ===== Messages ===== */
-.messages{flex:1;overflow-y:auto;padding:16px 24px;display:flex;flex-direction:column;scroll-behavior:smooth;max-width:780px;width:100%;margin:0 auto;background:var(--chat-wall, transparent)}
+.messages{flex:1;overflow-y:auto;padding:16px 24px;display:flex;flex-direction:column;scroll-behavior:smooth;max-width:780px;width:100%;margin:0 auto;background:transparent}
 .messages::-webkit-scrollbar{width:7px}
 .messages::-webkit-scrollbar-thumb{background:transparent;border-radius:4px}
 .messages:hover::-webkit-scrollbar-thumb{background:var(--bg-tertiary)}
@@ -224,7 +256,8 @@ body.sidebar-collapsed .sb-reopen{display:grid}
 .msg-row:hover .bubble{transform:translateY(-1px);box-shadow:0 3px 12px rgba(0,0,0,.14)}
 .bubble.has-attachment{padding:4px}
 @keyframes popIn{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
-.msg-row.me .bubble{background:var(--bubble-me);color:#fff;border-bottom-right-radius:4px}
+.msg-row.me .bubble{background:var(--bubble-me);color:#fff;border-bottom-right-radius:4px;box-shadow:0 2px 10px color-mix(in srgb,var(--accent-key) 22%,transparent),inset 0 1px 0 rgba(255,255,255,.12)}
+.msg-row.me .bubble.has-attachment{box-shadow:0 2px 14px color-mix(in srgb,var(--accent-key) 24%,transparent)}
 .bubble-time{font-size:11px;line-height:1;opacity:.62;display:inline-block;margin-left:8px;vertical-align:bottom;white-space:nowrap;float:right;margin-top:7px;padding-left:8px;position:relative;top:3px}
 .msg-row.me .bubble-time{color:#fff}
 .msg-time{font-size:11px;color:var(--text-secondary);margin:2px 6px 0}
@@ -352,7 +385,7 @@ body.dark .recording-bar{background:#3b1a1a;color:#f87171}
    control right — so rows line up on the same edge no matter how narrow the
    window gets, and the control column never shrinks (that is what used to make
    the toggles look jumbled and cut the segment labels in half). */
-.settings-panel{position:fixed;top:0;right:0;width:min(340px,100vw);max-width:100vw;height:100%;max-height:100vh;background:var(--bg-primary);box-shadow:-8px 0 40px rgba(0,0,0,.16);z-index:250;display:flex;flex-direction:column;border-left:1px solid var(--border);animation:settingsIn .22s ease}
+.settings-panel{position:fixed;top:0;right:0;width:min(var(--w-settings,340px),100vw);max-width:100vw;height:100%;max-height:100vh;background:var(--bg-primary);box-shadow:-10px 0 44px color-mix(in srgb,var(--accent-key) 12%,rgba(0,0,0,.16));z-index:250;display:flex;flex-direction:column;border-left:1px solid var(--border);animation:settingsIn .22s ease}
 @keyframes settingsIn{from{transform:translateX(24px);opacity:0}to{transform:translateX(0);opacity:1}}
 .settings-panel[hidden]{display:none}
 .settings-header{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:56px;padding:12px 16px;border-bottom:1px solid var(--border)}
@@ -382,10 +415,10 @@ body.dark .recording-bar{background:#3b1a1a;color:#f87171}
 .seg.wide .seg-btn{flex:1 1 0;min-width:0;padding:0 6px}
 
 /* ===== Media library (screenshots + recordings) ===== */
-.media-panel{width:min(360px,100vw)}
+.media-panel{width:min(var(--w-media,360px),100vw)}
 /* Mini recording panel (floating menu ⚙). Same shell as the other side panels,
    just narrow enough to sit inside an expanded bubble. */
-.mini-panel{width:min(340px,100vw)}
+.mini-panel{width:min(var(--w-mini,340px),100vw)}
 .mini-device{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;margin:8px 0;font-size:12.5px;color:var(--text-secondary)}
 .mini-device>span{white-space:nowrap}
 .mini-device select{width:100%;min-width:0;padding:6px 8px;border-radius:9px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:12px;outline:none}
@@ -752,3 +785,37 @@ body.pip-max .pip-resize{display:none!important}
 .lb-close:hover{background:rgba(255,255,255,.2)}
 .attach-image img{cursor:zoom-in;transition:opacity .15s}
 .attach-image img:hover{opacity:.9}
+
+/* ===== Hover tooltips =====
+   The floating popup stacks eleven buttons in one header, and "minimise",
+   "close" and "fill the screen" look alike at a glance. Every control carries
+   a one-line description that appears on hover, so the wrong one is never
+   pressed just to find out what it does. The bubble window is only 56px wide,
+   so there the native title (drawn by the OS outside the window) is kept. */
+.tip{position:fixed;z-index:900;max-width:260px;padding:7px 10px;border-radius:10px;background:color-mix(in srgb,var(--rail-bg) 92%,#000);color:#fff;font-size:11.5px;line-height:1.4;font-weight:500;text-align:left;box-shadow:0 8px 26px rgba(0,0,0,.42);border:1px solid rgba(255,255,255,.10);pointer-events:none;opacity:0;visibility:hidden;transform:translateY(-3px);transition:opacity .12s ease,transform .12s ease}
+.tip.show{opacity:1;visibility:visible;transform:translateY(0)}
+.tip::after{content:"";position:absolute;left:var(--tip-arrow,50%);margin-left:-5px;border:5px solid transparent;border-top-color:color-mix(in srgb,var(--rail-bg) 92%,#000)}
+.tip.below::after{top:-10px;border-top-color:transparent;border-bottom-color:color-mix(in srgb,var(--rail-bg) 92%,#000)}
+.tip.above::after{bottom:-10px}
+.tip.wide{max-width:300px}
+
+/* Close is the only button in the floating popup that takes the bar away — the
+   only one that answers the pointer in red, so it can't be hit by accident. */
+.icon-btn.danger-btn:hover{background:#fee2e2;color:#c81e1e}
+body.dark .icon-btn.danger-btn:hover{background:#3b1a1a;color:#f87171}
+
+/* ===== Resize grips =====
+   The conversation list and every side panel can be dragged wider or
+   narrower (sidebar.js / panelsize.js), and the size sticks for next time.
+   The grip is a thin strip with a 7px hit area so it is easy to grab. */
+.sb-resize{position:absolute;top:0;right:0;width:7px;height:100%;cursor:col-resize;touch-action:none;z-index:6}
+.panel-resize{position:absolute;top:0;left:0;width:7px;height:100%;cursor:col-resize;touch-action:none;z-index:6}
+.sb-resize::after,.panel-resize::after{content:"";position:absolute;top:0;height:100%;width:2px;background:transparent;transition:background .12s ease}
+.sb-resize::after{right:2px}
+.panel-resize::after{left:2px}
+body.resizing .sb-resize::after,body.resizing .panel-resize::after{background:var(--accent)}
+.sb-resize:hover::after,.panel-resize:hover::after{background:color-mix(in srgb,var(--accent) 70%,transparent)}
+body.pip-mode.pip-collapsed .sb-resize,body.pip-mode.pip-collapsed .panel-resize{display:none}
+/* A too-wide panel in a tiny window would be a slab of background over the
+   bubble — and the bubble is the only thing keeping the app reachable. */
+body.pip-mode.pip-collapsed .settings-panel,body.pip-mode.pip-collapsed .canvas-panel{display:none!important}

@@ -149,9 +149,36 @@ export function initSidebar(h = {}) {
   function setCollapsed(collapsed, save = true) {
     document.body.classList.toggle("sidebar-collapsed", collapsed);
     settings.sidebarCollapsed = collapsed;
+    syncReopen();
     if (save && window.api && window.api.saveSettings) saveCfg();
   }
   if (settings.sidebarCollapsed) document.body.classList.add("sidebar-collapsed");
+
+  /* The round "Show chats" button belongs on screen only while the list is
+     NOT. The stylesheet keys off `sidebar-open` instead of `sidebar-collapsed`
+     so it also covers the floating popup, where the conversation list is
+     rendered from 720px up even if the collapsed flag is still in settings —
+     the button used to sit on top of a list that was already wide open. */
+  const wideWindow = window.matchMedia("(min-width: 720px)");
+  function visibleList() {
+    const collapsed = document.body.classList.contains("sidebar-collapsed");
+    const widePopup = document.body.classList.contains("pip-mode") && wideWindow.matches;
+    return !collapsed || widePopup;
+  }
+  function syncReopen() {
+    const open = visibleList();
+    if (document.body.classList.contains("sidebar-open") !== open) {
+      document.body.classList.toggle("sidebar-open", open);
+    }
+  }
+  syncReopen();
+  /* pip-mode / sidebar-collapsed can also be flipped from another window or by
+     the pip bootstrap, which runs after this module. */
+  if (window.MutationObserver) {
+    new MutationObserver(syncReopen).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  }
+  if (wideWindow.addEventListener) wideWindow.addEventListener("change", syncReopen);
+  window.addEventListener("resize", syncReopen);
 
   const btnCollapse = $("btnSidebarCollapse");
   if (btnCollapse) btnCollapse.addEventListener("click", e => {
