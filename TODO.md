@@ -1,5 +1,106 @@
 # Cleanup & Verification Log
 
+## v1.5.1 (14/10) — Thẻ review: nút minimize, ghi chú in thẳng vào ảnh, tên file ngày-tháng-năm_giờ-phút-giây
+
+### Bối cảnh (bạn yêu cầu)
+“Mỗi khi chụp hình xong… thêm nút minimize ảnh kế bên nút close ở trên; đồng thời build lại bản exe và xoá bản cũ; nếu có thể tích hợp nút copy ở dưới bấm vào đó và paste cho trang web hay doc hay bất kì chỗ nào; thêm chỗ ghi chú trong ảnh; tên file là ngày tháng năm và giờ phút giây sau đó là chữ shot; mỗi lần update hãy git push lên github.”
+
+### Đã làm
+- **Nút minimize cạnh nút close** ([review.html](review.html) · [review.js](review.js) · `review:setmini` trong [main.js](main.js)): bấm là thẻ **gấp còn đúng thanh tiêu đề** (thân ảnh, ô ghi chú, hàng nút đều ẩn), bấm lại **trả về đúng kích thước và vị trí cũ**. Đây là minimize **cố tình không** dùng `win.minimize()`: thẻ nằm ngoài taskbar (`skipTaskbar`) nên minimize thật sẽ là đường một chiều, không có nút nào để gọi nó về; main giữ bounds cũ và set lại nên không lệch một pixel.
+- **Ghi chú in thẳng vào ảnh** (ô “Note — it gets printed on the picture” + `review:annotate`): gõ chữ → renderer vẽ một **dải chú thích** dưới ảnh bằng canvas (tự ngắt dòng tối đa 5 dòng, cỡ chữ theo bề rộng ảnh) rồi gửi PNG đã bake cho main, main **ghi đè chính file trong `captures/`** ⇒ thẻ, file trên đĩa, nút Download/Copy/Save as… và media library **luôn là một ảnh thống nhất**. Xoá chú thích thì **ảnh gốc được trả lại byte-for-byte** (main giữ bản gốc trong RAM lúc mở thẻ, nên không có chuyện mất ảnh sạch). Media library đang mở tự đọc lại thẻ đó (kênh `capture:updated` + URL có `?v=mtime` để không dính cache ảnh cũ).
+- **Bug thật gặp khi làm và đã sửa**: vẽ chính ảnh `local-file://` lên canvas **làm bẩn (taint) canvas** → `toDataURL()` ném “Tainted canvases may not be exported” và chú thích không bao giờ bake được. Nay renderer lấy **byte ảnh gốc qua IPC** (`review:bytes`) và dựng ảnh từ **blob cùng origin** (`createImageBitmap(blob)`, có fallback blob URL) ⇒ canvas sạch. Test đã bắt được đúng lỗi này (nó fail trước, pass sau), không phải sửa mò.
+- **Copy dán được ở mọi nơi**: đo thật trên Windows → `clipboard.writeImage()` để clipboard ở dạng `image/png` (chính là thứ Chrome/Word/Docs/khung chat dán được). Phát hiện thêm: viết thêm `writeBuffer("image/png")` sau đó **xoá sạch clipboard** (formats = `[]`) ⇒ bỏ hẳn ý định “thêm cho đủ định dạng”, giữ đúng một lần writeImage. Nút Copy giờ báo *“Copied — press Ctrl+V in a page, a document or a chat”*.
+- **Tên file theo đúng yêu cầu**: `shotStamp()` → `dd-mm-yyyy_hh-mm-ss`, tên = `<stamp>-shot.png` (ví dụ **`14-10-2026_13-48-03-shot.png`**). Chỉ ảnh chụp đổi tên; file ghi hình vẫn `rec-…webm` như cũ (không đụng vào luồng đang chạy tốt).
+- **Xoá exe cũ + build lại**: xoá sạch `dist/` (2 exe + blockmap + latest.yml + builder-debug.yml + win-unpacked) rồi build → **BUILD_EXIT=0**. `dist\Loopback 1.5.1.exe` **103.561.046 B**, `dist\Loopback Setup 1.5.1.exe` **103.783.160 B**, blockmap **107.383 B**, `latest.yml` version 1.5.1 + `size: 103783160` khớp đúng file Setup. Giữ nguyên version 1.5.1 (không bump) là **có chủ ý**: file trên Desktop bị ghi đè tại đúng đường dẫn cũ nên **entry autostart không trỏ vào file đã biến mất**.
+
+### Kiểm chứng (đều chạy thật)
+- [x] `npx electron reviewtest.js` (profile vứt đi) → **RESULT PASS, 29 check**: thẻ hiện đúng ảnh 160×120; tên file khớp `^\d{2}-\d{2}-\d{4}_\d{2}-\d{2}-\d{2}-shot\.png$`; **minimize**: `380×248` → `380×49` (thân/nút `display:none`, thanh tiêu đề 47px còn nguyên) → bấm lại **đúng `380×248` tại (770,392)**; **Download** ra file PNG **byte-identical** với bản trong `captures/`; **Copy** → clipboard có ảnh 160×120 **và format `image/png`**; **gõ chú thích bằng sự kiện bàn phím thật** (`sendInputEvent char`) → file trong `captures/` phình từ **7.357 B → 14.380 B**; thẻ hiện chính ảnh đã bake (`src` = `data:image/png…`, cao **204** = 120 + dải 84px); **đếm pixel**: quét vùng dưới ảnh gốc trong file đã lưu thấy **766 pixel mực chữ** (màu chữ gần trắng) — tức chữ **thật sự nằm trong ảnh**, không chỉ là metadata; Download lần nữa ra **đúng ảnh đã chú thích**; xoá chú thích → file **trở lại y hệt bản gốc 7.357 B**; chụp lần 2 thay thế thẻ; Delete xoá file + đóng thẻ + không sót cửa sổ.
+- [x] **Đo thêm bằng mắt máy** (script tạm, đã xoá): ảnh 160×120 với chú thích dài → **160×204**, dải chú thích cao **84px** = 3 dòng × 18px, hộp mực chữ nằm gọn trong dải (lề trái 10px, lề phải 19px — không cắt chữ), và ảnh 560×320 → **560×368** dải 48px, một dòng, chữ kết thúc ở x=463 (còn 96px lề phải).
+- [x] `npx electron captest.js` → **PASS 12/12**: `local-file://` vẫn 200/206/404 đúng, media library vẫn render thumbnail + preview ảnh, video vẫn phát (`readyState 1`), **0 lỗi console** — thay đổi URL (`?v=mtime`) và kênh `capture:updated` không làm hỏng gì.
+- [x] **Bản build khớp source**: giải nén `app.asar` của bản mới → **84/84 file SHA-256 trùng từng byte** với working tree, **0 file khác, 0 file thiếu** (chỉ `package.json` electron-builder rewrite — version 1.5.1).
+- [x] **Đưa bản mới ra desktop**: `…\OneDrive\Desktop\Loopback 1.5.1.exe` SHA-256 **trùng byte** với `dist/`; chạy thật → **8 tiến trình `Responding: True`**, **không có `error.log`**; entry `electron.app.Loopback` vẫn `"…\Desktop\Loopback 1.5.1.exe" --autostart` (đúng file mới, không phải bản trong `%TEMP%`).
+
+### Còn lại / giới hạn thật
+- Thao tác tay trên bản **exe đã đóng gói** (bấm nút minimize, gõ chú thích) không lái được từ ngoài — nhưng `app.asar` của bản đóng gói **trùng byte** với source đã chạy 29 check ở trên, nên phần được kiểm là đúng đoạn code trong exe.
+- **Code Android không có trong workspace này** (và không có repo nào trên máy trỏ tới `Annguyen0410/Loopback`) — đã hỏi bạn để push riêng.
+
+## v1.5.1 — Màn hình review sau khi chụp: xem ảnh + tải xuống ngay
+
+### Bối cảnh (bạn yêu cầu)
+“Chụp xong cho màn hình review ảnh và nút tải xuống rồi tải xuống luôn, chứ không cần vào bong bóng chat rồi mới tải xuống rườm rà.”
+
+### Đã làm
+- **Cửa sổ review mới** ([review.html](review.html) · [review.js](review.js) · [review-preload.js](review-preload.js)): chụp xong một vùng là hiện **thẻ nổi ngay giữa màn hình** — ảnh, kích thước (160×120 · 4 KB · tên file), và các nút **Download · Copy · Save as… · Show in folder · Delete**, kèm dòng trạng thái nói rõ “Saved to <đường dẫn>”. Kéo được bằng thanh tiêu đề, `Esc` để đóng.
+- **Download = một click, ghi thẳng vào thư mục Downloads** (`review:download` trong [main.js](main.js)) — **không hộp thoại**, không qua media library; trùng tên thì tự thành `name (1).png`. `Copy` đưa ảnh vào clipboard, `Save as…` mở hộp thoại chọn chỗ (dùng chung hàm với nút download của media library nên hai chỗ hành xử giống nhau).
+- **Xoá**: `Delete` xoá file trong `captures/`, đóng thẻ và phát `capture:removed` để **media library đang mở tự bỏ thẻ đó** (thêm `capture.onRemoved` vào bridge + theo dõi trong [gallery.js](src/renderer/gallery.js)) thay vì hiện file đã biến mất.
+- **Chụp lần sau thay thế thẻ cũ** (đóng trước khi grab) nên thẻ cũ **không bao giờ lọt vào ảnh mới**; bỏ luôn toast “Screenshot saved” khi thẻ đã hiện (toast chỉ còn là lưới an toàn nếu cửa sổ review không mở được — `capture:saved` giờ mang cờ `review`).
+- **Ảnh vẫn nằm trong `captures/`** như trước (media library, preview, dữ liệu cũ không đổi) — thẻ review chỉ là bước cuối cho rõ ràng. Cố ý **không** đặt content-protection cho cửa sổ này: trên Windows, cửa sổ trong suốt + protected hoá thành khối đen (đúng lỗi của bubble trước đây). Cũng đã sửa 3 tooltip cũ nói sai “ảnh được gửi vào chat” thành mô tả đúng luồng mới.
+
+### Kiểm chứng (đều chạy thật)
+- [x] `reviewtest.js` (suite mới, 20 check) → **RESULT PASS**: thẻ review hiện (always-on-top, không taskbar, nằm trong work area), ảnh decode đúng **160×120** và `src` là `local-file://`, meta ghi `160×120 · 4 KB · shot-….png`, **1 click Download → file PNG thật trong Downloads, byte-identical với bản trong `captures/`**, Copy → clipboard có ảnh 160×120, chụp lần 2 → thẻ cũ bị `destroyed` và chỉ còn **1** thẻ review, Delete → file biến mất + thẻ đóng + **không sót cửa sổ nào**. Không còn toast “Screenshot saved” khi thẻ hiện (test kiểm trực tiếp class `show` của toast trong cửa sổ chat).
+- [x] Không hồi quy (mỗi suite chạy với profile sạch): `piptest` **PASS** (chính nó chụp thật rồi mới có thẻ review), `audittest` **PASS**, `combotest` **PASS**, `uitest` **PASS**, `menutest` **59/59 exit 0**, `traytest` cả 3 chế độ **PASS**.
+
+### Đưa 1.5.1 ra desktop + gỡ bản cài 1.4.0 (đều chạy thật)
+
+**Bạn yêu cầu:** “file trên desktop là bản 1.4.0 mà, tạo cái 1.5.1 rồi lôi ra màn hình desktop, xong xóa bản cũ đi.”
+- **Xác định đúng “bản cũ”**: shortcut `Loopback.lnk` trên `C:\Users\nguye\OneDrive\Desktop` chỉ là con trỏ tới **bản cài 1.4.0** ở `%LOCALAPPDATA%\Programs\Loopback` (asar trong đó ghi `version: 1.4.0`, **không có** `review.*`) + shortcut Start Menu + entry Add/Remove — cả ba đều là 1.4.0.
+- **Copy bản mới ra desktop**: `dist\Loopback 1.5.1.exe` → `…\OneDrive\Desktop\Loopback 1.5.1.exe`, **SHA-256 trùng byte** (`c1ec24322cd1952b7d1c5ee2e7c58f0e3caf6398b388fe6a611e3d850dcbe912`).
+- **Gỡ 1.4.0 bằng chính uninstaller của nó** (`"…\Uninstall Loopback.exe" /currentuser /S`) → **exit 0**; thư mục cài biến mất sau ~10 s; **không còn** shortcut Desktop/Start Menu lẫn entry registry. Không đụng tới `%APPDATA%\messenger-self-chat` (note/cài đặt của bạn giữ nguyên).
+
+- [x] **Bấm file trên desktop** ở **đúng trạng thái bàn giao**: app lên sau **12,3 s**, **7 tiến trình `Loopback.exe`**, cửa sổ chat `messenger-self-chat` **`Responding: True`**, **không `error.log`**, không tự thêm autostart. Sau test đã tắt sạch và dọn hết temp.
+- [x] **Bẫy dung lượng có thật (đo được)**: portable tự giải nén vào `%TEMP%` **hai** thư mục (~460 MB + ~300 MB) → ở mức **0,34 GB trống thì bấm không lên** (wrapper thoát im lặng, đúng như ghi chú ở README/ITCH), còn **0,87 GB thì lên bình thường**. Đã dọn rác temp của chính app (`nsoC4FF.tmp` 457M, `3KXI6…` 295M, `~nsu.tmp`): ổ C: **0,07 → 0,87 GB**.
+- [x] Trong `%TEMP%` còn ~**8 GB** thư mục `ns*.tmp` (406 MB × ~20, chứa `7z-out\Bop.exe`) — là rác của app **Bop** portable (dự án khác của bạn, không chạy lúc kiểm tra), **không phải Loopback**, nên **không xoá**; đã báo lại để bạn quyết.
+
+### Chạy ngầm: “mở máy là chạy sẵn” chưa bật — đã bật & nghiệm thu
+
+**Bạn báo:** “app vẫn chưa hoạt động trên máy theo dạng chạy ngầm” + ảnh chụp khay.
+- **Điều tra thật (không đoán)**: lúc kiểm tra **0 tiến trình** Loopback, registry **không có** entry autostart, và `settings.json` thật (từ thời 1.4.0, sửa lần cuối 29/9) ghi `"startAtLogin": false`. Code mới *tôn trọng* giá trị đã lưu đó — mỗi lần chạy còn **chủ động gỡ** entry — nên mở máy xong không có gì chạy. **Không phải lỗi tray/`runInBackground`.**
+- **Tray + “đóng cửa sổ vẫn chạy ngầm” vẫn tốt trên đúng file desktop**: WM_CLOSE cả 2 cửa sổ (chat + bong bóng 42×186) → **6 tiến trình còn sống**, không `error.log`. (Nếu tray chết thì `window-all-closed` đã thoát app — còn sống ⇒ tray có thật.)
+- **Sửa**: đặt `startAtLogin: true` trong `settings.json` (y hệt thao tác toggle *Start with Windows*).
+- [x] **Giả lập đúng lúc mở máy**: `"…\OneDrive\Desktop\Loopback 1.5.1.exe" --autostart` → lên sau **~34 s**, **7 tiến trình**, **đúng 1 cửa sổ hiện = bong bóng 42×186** (cỡ Small), **0 cửa sổ chat**, không `error.log` — đúng hành vi “mở máy là chạy sẵn, không cửa sổ nào phải tắt”.
+- [x] **Entry do app tự ghi**: `electron.app.Loopback = "C:\Users\nguye\OneDrive\Desktop\Loopback 1.5.1.exe" --autostart` (trỏ đúng file trên desktop, không phải bản trong `%TEMP%`); **còn nguyên sau khi tắt app**.
+- [x] **Dọn sạch**: temp 2 lần chạy đã xoá, 0 tiến trình còn lại, C: **44 GB trống**.
+- **Ghi chú**: lần mở máy thật chỉ Windows chạy được — mô phỏng đã dùng đúng entry + đúng cờ. Trong ảnh bạn gửi lúc 17:28 **không có icon Loopback** (đúng: lúc đó nó không chạy); icon Loopback là ô xanh dương + bong bóng chat có tia sét, nằm trong mục icon ẩn (⌄) của khay — muốn thấy thường xuyên thì ghim nó ra ngoài.
+
+### Build lại 1.5.1 theo yêu cầu: xoá exe cũ → build mới → thay luôn file desktop
+
+**Bạn yêu cầu:** “xóa mấy exe cũ đi build cái exe mới lun.”
+- **Trạng thái trước build**: `dist/` chỉ còn bộ 1.5.1 (build 10/10 22:41); `find -newer` cho thấy **không file code nào mới hơn exe** (từ build đó chỉ docs đổi) → đây là lần làm mới bản build, code không đổi.
+- [x] **Xoá sạch bộ cũ** (2 exe + blockmap + latest.yml + builder-debug.yml) rồi `npm run build` → **BUILD_EXIT=0**: `dist\Loopback 1.5.1.exe` **103.557.753 B**, `dist\Loopback Setup 1.5.1.exe` **103.779.869 B**, blockmap **107.562 B**; `latest.yml` version 1.5.1 khớp đúng `size: 103779869`; cả hai exe **NotSigned** như trước.
+- [x] **Hash asar vs working tree (cách chắc hơn lần trước)**: giải nén toàn bộ `app.asar` ra đĩa rồi so **SHA-256 từng file** → **84/84 file trùng byte**, 0 thiếu; chỉ `package.json` so riêng (electron-builder rewrite — name `messenger-self-chat`, version **1.5.1**).
+- [x] **Thay file trên desktop**: `…\OneDrive\Desktop\Loopback 1.5.1.exe` = bản mới — **SHA-256 `a84c4c2a24647c1504085cfb77a74997aa27d5ca00fa95ac00efe1a87503fd48`** trùng byte với dist.
+- [x] **Chạy thử bản MỚI trên desktop (thật)**: bình thường → cửa sổ chat sau **~15 s**, 8 tiến trình **`Responding: True`** hết, không `error.log`; chế độ mở máy `--autostart` → **chỉ 1 cửa sổ hiện = bong bóng 42×186, 0 cửa sổ chat**; RUN entry vẫn `"…\Desktop\Loopback 1.5.1.exe" --autostart`.
+- [x] **Dọn sạch**: 3 thư mục temp của các lần chạy đã xoá (`3KZX4Yi…`, `nsg8A53.tmp`, `nsi42B.tmp`), `win-unpacked` + script kiểm tra tạm + `dist-build.log` đã xoá; **0 tiến trình**, không `error.log`, C: **43,95 GB**.
+
+## v1.5.0 — Chạy ngầm dưới tray, tự mở cùng Windows, build bản mới
+
+### Bối cảnh (bạn yêu cầu)
+1. “Cho app hoạt động ngầm dưới tray” — mở máy là app đã chạy sẵn, có sẵn bong bóng chat, và không chiếm nhiều dung lượng.
+2. Xoá các bản exe cũ trong `dist/` rồi build bản mới.
+
+### Đã làm
+- **Icon dưới tray** (`main.js`, `Tray` + `Menu` của Electron, icon lấy từ `assets/icon.png` resize về 16px cho nét): menu gồm **Open/Focus Loopback** (mở cửa sổ chat), **Show/Hide chat bubble** (bật/tắt bong bóng), **Start with Windows**, **Keep running in the tray**, **Quit Loopback**. Click trái icon = mở chat (hoặc cất đi khi đang mở), click phải = menu; menu được dựng lại mỗi lần đổi trạng thái nên nhãn/dấu tick luôn đúng.
+- **Sống qua mọi cửa sổ đóng**: `window-all-closed` không quit nữa khi tray còn sống (`settings.runInBackground`, mặc định **BẬT**) → đóng hết cửa sổ là app vẫn nằm ở tray; `before-quit` mới thật sự thoát, nên **Quit Loopback** trong menu tray (hoặc tắt toggle) là cách thoát.
+- **Tự mở cùng Windows, mặc định BẬT**: `settings.startAtLogin` giờ mặc định on; login item được đăng ký với cờ `--autostart` nên lần khởi động cùng máy vào **chế độ ẩn**: chỉ tray + bong bóng chat, **không tạo cửa sổ chat** cho tới khi người dùng mở. Đây cũng là mức tiết kiệm RAM lớn nhất (bỏ hẳn một renderer 1200×800 lúc boot). Chỉ đăng ký khi `app.isPackaged` — chạy dev (`electron .`) không ghi registry bằng `electron.exe`.
+- **Đóng bong bóng mà không còn cửa sổ nào** → app ở lại tray và có **balloon một lần** nói rõ “Loopback is still running … next to the clock”, thay vì trông như vừa bị tắt.
+- **Settings**: thêm toggle **Keep running in the tray**, cập nhật câu chữ của *Start with Windows*, thêm hint giải thích tray; panel còn **đọc lại trạng thái thật** mỗi khi cửa sổ khác (menu tray) đổi setting nên hai chỗ không bao giờ lệch nhau.
+
+### Kiểm chứng (đều chạy thật)
+- [x] `traytest.js` (**suite mới**, 14 check) → **RESULT PASS**: tray có thật + menu đủ 5 dòng; dòng bubble mở **và** đóng được bong bóng; nhãn đổi Focus ↔ Open khi cửa sổ chat ẩn/hiện; đóng hết cửa sổ → `windows: 0` mà tiến trình **vẫn sống**; `second-instance` mở lại cửa sổ chat và cửa sổ đó `app-ready`.
+- [x] `TRAYTEST_USERDATA=<dir> npx electron traytest.js` → **RESULT PASS 19/19**, thêm 5 check ghi file: toggle background ghi `runInBackground:false` vào `settings.json`, menu dựng lại đúng dấu tick, toggle login item báo đúng thứ OS nhận, hồ sơ vứt đi được trả lại nguyên trạng.
+- [x] `npx electron traytest.js --autostart` → **RESULT PASS**: đúng cờ `--autostart`, tray lên trước tiên, bong bóng đã dock và ở trạng thái collapsed, **0 cửa sổ chat** (chỉ `index.html?pip=1`), đóng bong bóng → app vẫn ở tray, mở lại app → cửa sổ chat trở lại.
+- [x] `TRAYTEST_USERDATA=<dir> npx electron traytest.js --background-off` → in `QUIT-EXPECTED` rồi tiến trình **tự thoát** (exit **0**, không có dòng RESULT): tắt *Keep running in the tray* thì đóng cửa sổ cuối là thoát thật, đúng như toggle hứa. Chạy cờ này **không** kèm profile vứt đi thì suite từ chối và exit **1** (không ghi vào `settings.json` thật của bạn).
+- [x] `menutest.js` **RESULT PASS** (panel Settings thêm 1 dòng + 1 hint vẫn nằm trọn trong cửa sổ 320×420/380×300, 6 toggle thẳng một mép, không cắt chữ), `piptest.js` **PASS** (không hồi quy ở luồng floating bar).
+- [x] Chạy lại baseline trước khi kết luận: `uitest.js` / `audittest.js` / `combotest.js` có FAIL **y hệt khi bỏ thay đổi của tôi** (bar 73×322 do chính test chuyển S/M/L; `emptyState` thiếu id; camera bubble cần phần cứng) → **không phải hồi quy từ v1.5.0**.
+
+### Build 1.5.0 (xoá exe cũ → build mới, đều chạy thật)
+- [x] `package.json` **1.4.0 → 1.5.0**; xoá sạch bộ 1.4.0 trong `dist/` (−202 MB) rồi `npm run build` → `dist\Loopback Setup 1.5.0.exe` (**103.776.328 B**), `dist\Loopback 1.5.0.exe` (**103.554.213 B**), blockmap + `latest.yml` version 1.5.0 khớp đúng size; `Get-AuthenticodeSignature` cả hai = **NotSigned**; `dist/` sau khi dọn `win-unpacked` = **198M**.
+- [x] **Asar bản build:** có đủ dấu vết thay đổi — `Keep running in the tray` ×2, `Start with Windows` ×6, `Loopback is still running` ×1, `setLoginItemSettings` ×1, `runInBackground` ×5, `--autostart` ×3, `PORTABLE_EXECUTABLE_FILE` ×1.
+- [x] **Chạy thật bản đã build** (profile vứt đi): 6 tiến trình, `Responding: True`, không `error.log`, tự tạo `files/`+`voice/`+`pip.json`; **login item tự đăng ký** `electron.app.Loopback = "...\dist\win-unpacked\Loopback.exe" --autostart` — đúng thứ bạn yêu cầu “mở máy là chạy sẵn”.
+- [x] **Đo RAM thật** (tổng working set các tiến trình Loopback): boot ẩn **524,7 MB / 6 tiến trình** → mở cửa sổ chat **647,7 MB / 7 tiến trình** ⇒ cửa sổ chat tốn ~**123 MB**; chế độ mở máy bằng tray + bong bóng không nạp phần đó.
+- [x] **Bug thật phát hiện khi thử bản portable**: login item trỏ vào bản app đã giải nén trong `%TEMP%` (sẽ chết sau khi Windows dọn temp) → sửa `setLoginItem` dùng `process.env.PORTABLE_EXECUTABLE_FILE`; build lại và kiểm chứng: entry thành `"...\dist\Loopback 1.5.0.exe" --autostart`. Đồng thời `getLoginItemSettings` được gọi kèm đúng `{path,args}` nên toggle trong Settings/menu tray phản ánh đúng thực tế.
+- [x] **Phát hiện về dung lượng máy bạn**: ổ **C: chỉ còn ~0,13 GB** (D: còn 566 GB) → bản portable cần ~250 MB chỗ trống trên ổ chứa `TEMP` để tự giải nén, thiếu chỗ thì nó thoát im lặng; đã ghi vào README + ITCH.md, và `dist/` để ở ổ D: (198M). Registry đã được trả lại nguyên trạng, không còn tiến trình Loopback nào chạy nền sau khi thử.
+
 ## v1.4.0 — Vòng sửa UI: nút floating bar, section kéo co giãn, theme
 
 ### Bối cảnh (bạn yêu cầu)

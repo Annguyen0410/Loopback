@@ -1,6 +1,6 @@
 {
   "name": "messenger-self-chat",
-  "version": "1.4.0",
+  "version": "1.5.1",
   "description": "Electron desktop app — a private chat with yourself: notes, voice notes, screenshots, plus a world monitor.",
   "main": "main.js",
   "scripts": {
@@ -27,6 +27,9 @@
       "shot-overlay.html",
       "shot-overlay.js",
       "shot-preload.js",
+      "review.html",
+      "review.js",
+      "review-preload.js",
       "cam.html",
       "cam-overlay.js",
       "cam-preload.js",

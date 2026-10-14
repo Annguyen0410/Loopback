@@ -114,8 +114,16 @@ empty folder: `mkdir assets`.
 - **The bar can be waiting for you** — with *Show the bar when the app starts*
   on, the floating bar is already on screen (docked to the left or right edge,
   *Dock to*) when the app opens, and **minimizing the app brings it straight up**
-  (*Minimizing shows the bar*). *Start with Windows* registers the app as a
-  login item, so the bar is there after a reboot too
+  (*Minimizing shows the bar*)
+- **It lives in the tray** — the Loopback icon next to the clock opens the chat,
+  toggles the bubble, flips *Start with Windows* / *Keep running in the tray* and
+  quits the app (a fresh tray icon may sit in the hidden-icons overflow at ⌄ —
+  pin it out there once). Closing every window no longer kills it: the process
+  stays in the tray (turn that off with *Keep running in the tray*). *Start with Windows*
+  registers the login item — **on by default** — and a boot start comes up
+  **hidden**: tray + floating bar, no window to dismiss and no chat renderer
+  loaded until you ask for one, which is also the cheapest way to keep it
+  always-running on a laptop
 - **Drag & drop files onto the bubble** to attach them instantly
 - **Realtime sync between windows** — messages, chats and theme changes made
   in one window appear in the other immediately
@@ -148,6 +156,25 @@ empty folder: `mkdir assets`.
   bubble and the camera bubble just off every display** for the grab and puts
   them straight back, so a selection that crosses the pill captures what is
   behind it, never the pill itself.
+- **A screenshot ends in a review card, not in a hunt** — the moment the region
+  is selected a small always-on-top card opens with the picture, its dimensions
+  and its size, and buttons that do the obvious thing: **Download** (one click,
+  straight into your Downloads folder — no dialog, no trip through the bubble
+  into the media library), **Copy** to the clipboard, **Save as…**, **Show in
+  folder**, **Delete**. It is draggable by its header, closes on `Esc`, and a
+  new shot replaces it (an earlier card is dismissed *before* the next grab, so
+  it can never be baked into the new screenshot).
+- **The review card writes a note INTO the picture, and gets out of the way** —
+  type in the note line and the text is printed under the shot as a caption
+  strip (baked with a canvas, so it is in the stored capture and in everything
+  Download / Copy / Save as… hand out; clear the note and the pristine shot
+  comes back byte for byte). The **−** button beside the close button collapses
+  the card to its title bar — it lives out of the taskbar, so a real minimize
+  would be a one-way trip — and pressing it again restores it exactly where it
+  was. **Copy** leaves the picture on the clipboard as `image/png`, which is
+  what a web page, a document or a chat box pastes with `Ctrl+V`.
+- **Screenshot names read like a diary** — `14-10-2026_18-05-09-shot.png`:
+  day-month-year, hour-minute-second, then the word *shot*.
 - **Mini recording panel in the floating menu** (⚙ on the pill or in the bubble
   header): quality **SD / HD / FHD**, **30 / 60 fps**, show-or-hide the mouse
   cursor, and pick exactly which **camera** and **microphone** to use — no trip
@@ -212,7 +239,8 @@ empty folder: `mkdir assets`.
 C:\Users\<you>\AppData\Roaming\messenger-self-chat\
 ├── messages.json    # chats + messages (each message has a chatId)
 ├── settings.json    # dark mode + theme + bubble size + floating-bar options
-│                    #   (pipOnStartup, pipOnMinimize, pipDock, startAtLogin)
+│                    #   (pipOnStartup, pipOnMinimize, pipDock, startAtLogin,
+│                    #    runInBackground)
 ├── pip.json         # bubble orientation (vertical/horizontal) + position
 ├── quick.json       # quick-note target chat
 ├── error.log        # last main-process errors (see "Notes")
@@ -291,6 +319,21 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
 - The quick-note popup writes through the **main process** (`note:append`) and
   then replays the fresh state into every other window, so a stale renderer can
   never overwrite a note captured while the window was hidden.
+- The login item is registered by main on every launch (default on) and points
+  at **the file Windows should start**: the installed exe, or — for the portable
+  build — the portable exe itself, not the copy the wrapper unpacks into
+  `%TEMP%` (that folder is temporary, so an entry aimed there dies on cleanup).
+  It never registers in a dev run, where `process.execPath` is `electron.exe`.
+  A `startAtLogin:false` carried over in an old settings.json (from before the
+  tray existed) is honored — a launch then even *removes* the entry — so "it
+  never starts with Windows" is usually that single line: flip *Start with
+  Windows* once in Settings or the tray menu.
+- The **portable** build unpacks ~0.5–0.8 GB next to `%TEMP%` before it starts
+  (measured: the wrapper's two temp folders, ~460 MB + ~300 MB), so it needs
+  that much free space *on the drive holding TEMP* — on a nearly full C: the
+  wrapper exits silently (seen at 0.34 GB free; the same file launched fine
+  with 0.87 GB free). Point `TEMP`/`TMP` at a roomier drive (or install
+  instead), and it launches.
 - The global hotkey is registered best-effort: if another app already owns
   `Ctrl+Alt+N` the ⚡ rail button still opens the popup (a warning is logged).
 - `audittest.js` (`npx electron audittest.js`) is the "is the app healthy and
@@ -318,6 +361,35 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
   media library while searching and deleting from it; then tucks, relaunches
   and closes the bar. Fails on any renderer error and on any `error.log` entry.
   Set `COMBOTEST_USERDATA=<dir>` for a throwaway profile.
+- `traytest.js` (`npx electron traytest.js`) proves the app really lives in the
+  background: the tray icon is created, its menu opens and closes the bubble by
+  its own rows, both of its checkboxes write the setting they claim to (and the
+  login-item one reports what the OS accepted), **closing every window leaves the
+  process running** — then launching the app again brings the chat back out of
+  the tray. Run it with `--autostart` for the boot path: tray + floating bubble,
+  and *no* chat window is created at all. `TRAYTEST_USERDATA=<dir>` adds the two
+  checks that write settings.json (skipped without one, so your own settings are
+  never touched), and `--background-off` (with a throwaway profile) is the one
+  run that is *supposed* to end without a verdict: with *Keep running in the
+  tray* off, closing the last window must quit, so it prints `QUIT-EXPECTED` and
+  the process exits — `echo $?` reading 0 with no `RESULT` line is the pass.
+- `reviewtest.js` (`npx electron reviewtest.js`) takes a real region shot
+  through the picker and then checks what the review card promises: it opens
+  visible/in front/sized to the image with the picture really decoded (160×120,
+  not a broken image) and no redundant "Screenshot saved" toast; **one click on
+  Download writes a byte-identical PNG into the Downloads folder** and the card
+  says where it went; Copy puts the image on the clipboard **as `image/png`**
+  (the format a browser or a document pastes — checked, not assumed); typing a
+  note grows the stored capture by the caption strip, the card shows the
+  annotated picture itself, and the note's letters are counted **in the pixels**
+  of the saved PNG, not just in the metadata; clearing the note restores the
+  pristine file byte for byte; the minimize button collapses the card to its
+  title bar and brings back the exact same bounds; the file is named
+  `day-month-year_hour-minute-second-shot.png`; a second shot replaces the card
+  (the old one is destroyed *before* the new grab) instead of stacking; Delete
+  removes the capture, closes the card and leaves nothing on screen. It
+  redirects Downloads into a scratch folder and deletes the captures it made,
+  so your real Downloads folder and library are untouched.
 - `searchtest.js` (`npx electron searchtest.js`) smoke-tests global search +
   quick capture against the real app and restores your data afterwards.
 - `monitortest.js` (`npx electron monitortest.js`) exercises the `/world`

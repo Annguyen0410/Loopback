@@ -20,7 +20,7 @@
         </button>
       </div>
       <div class="rail-bottom">
-        <button class="rail-btn" id="btnScreenshot" data-cap="shot" title="Screenshot (drag to select)" data-tip="Screenshot — drag on screen to pick a region; it is saved and sent into the open chat.">
+        <button class="rail-btn" id="btnScreenshot" data-cap="shot" title="Screenshot (drag to select)" data-tip="Screenshot — drag on screen to pick a region; it is saved and a review card opens with Download, Copy and Save as.">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
         <button class="rail-btn" id="btnScreenRec" data-cap="rec" title="Record screen (mic + camera)" data-tip="Record the screen with mic and camera. Press again (or use the HUD) to stop.">
@@ -84,7 +84,7 @@
           </div>
         </div>
         <div class="chat-header-actions">
-          <button class="icon-btn pip-only cap-act" id="btnPipShot" data-cap="shot" title="Screenshot (drag to select)" data-tip="Screenshot — pick a region on screen; the shot lands in this chat and in the media library.">
+          <button class="icon-btn pip-only cap-act" id="btnPipShot" data-cap="shot" title="Screenshot (drag to select)" data-tip="Screenshot — pick a region on screen; a review card opens with Download, Copy and Save as, and the shot lands in the media library.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
           </button>
           <button class="icon-btn pip-only cap-act" id="btnPipRec" data-cap="rec" title="Record screen (mic + camera)" data-tip="Record the screen with mic and camera. While recording you get pause, discard and stop.">
@@ -395,7 +395,12 @@
             <span>Start with Windows</span>
             <label class="toggle"><input type="checkbox" id="settingStartAtLogin"><span class="toggle-slider"></span></label>
           </div>
+          <div class="settings-row">
+            <span>Keep running in the tray</span>
+            <label class="toggle"><input type="checkbox" id="settingRunInBackground"><span class="toggle-slider"></span></label>
+          </div>
           <div class="settings-hint">Drag the bar to park it, tap it to open the chat, or press ⤢ in the chat header to fill the screen (press it again to shrink back). Drop files onto the bar to send them.</div>
+          <div class="settings-hint">The tray icon next to the clock opens the chat, toggles the bubble and quits the app — closing every window leaves Loopback running there. Start with Windows comes up straight into the tray and the bubble, with no window to dismiss.</div>
         </div>
         <div class="settings-group">
           <label class="settings-label">Screen Recording</label>
@@ -538,7 +543,7 @@
       </span>
       <span class="pip-bubble-text">Loopback</span>
       <span class="pip-bubble-tools">
-        <button type="button" class="pip-tool" id="btnBubbleShot" data-cap="shot" title="Screenshot" data-tip="Screenshot without opening the chat — drag a region and it is sent.">
+        <button type="button" class="pip-tool" id="btnBubbleShot" data-cap="shot" title="Screenshot" data-tip="Screenshot without opening the chat — drag a region and a review card opens with Download, Copy and Save as.">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
         <button type="button" class="pip-tool" id="btnBubbleRec" data-cap="rec" title="Record screen (mic + camera)" data-tip="Start a screen recording straight from the bar (mic + camera); press again to stop.">

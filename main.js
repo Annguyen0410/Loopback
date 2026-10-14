@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Notification, nativeTheme, net, nativeImage, session, screen, globalShortcut, desktopCapturer, powerSaveBlocker } = require("electron");
+﻿const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Notification, nativeTheme, net, nativeImage, session, screen, globalShortcut, desktopCapturer, powerSaveBlocker, Tray, Menu, clipboard } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -33,6 +33,11 @@ let win = null;
 let monitorWin = null;
 let pipWin = null;
 let camWin = null;      // floating camera bubble (while recording from the bubble)
+let reviewWin = null;   // the screenshot review that opens right after a shot
+let reviewName = null;  // capture being reviewed (captures/<name>)
+let reviewNote = "";    // the note typed on the review card — printed into the image
+let reviewBase = null;  // pristine bytes of that capture, so a note can be undone
+let reviewMiniBounds = null; // bounds saved while the card is collapsed to its title bar
 
 /* A destroyed BrowserWindow is NOT `null`: touching one (isMinimized(),
    focus(), close(), webContents…) throws "Object has been destroyed", which
@@ -55,10 +60,22 @@ let pipMaximized = false;      // expanded popup filling the work area
 let pipPreMaxBounds = null;    // bounds to come back to when it is restored
 let pipAutoExpand = true;      // openPip() opens the chat popup (false = the bar)
 let recHideActive = false; // true while a recording keeps the app out of the video
+let tray = null;           // system-tray icon — the app's life in the background
+let isQuitting = false;    // true only when the user really asked to quit
+let trayBalloonShown = false; // "still running" tip: once per session
+let trayMenu = [];         // the live tray menu template (already built into Tray)
+/* Windows launches the login item with this flag (see setLoginItem). A boot
+   launch is meant to come up already running — tray + floating bar — without
+   throwing the full chat window in the user's face. */
+const AUTOSTART_FLAG = "--autostart";
+const STARTED_HIDDEN = process.argv.includes(AUTOSTART_FLAG);
 /* Smoke tests boot this module with `require("./main.js")`. The desktop-only
    startup extras (login item, floating bar on launch) are skipped for them so
    the tests' own windows stay undisturbed. */
 const IS_TEST_BOOT = !!(require.main && require.main.filename && require.main.filename !== __filename);
+/* Smoke tests stay window-only by default; traytest.js sets this to exercise
+   the real background path (tray icon + keep-alive) in the same process. */
+const TRAY_IN_TEST = process.env.LOOPBACK_TRAY_TEST === "1";
 const PIP_BUBBLE_H = { w: 280, h: 52 }; // horizontal pill (fits shot/rec/media tools)
 const PIP_BUBBLE_V = { w: 56, h: 248 }; // vertical bookmark tab (fits stacked tools)
 const PIP_CHAT = { w: 430, h: 700 };
@@ -147,6 +164,156 @@ function safeFile(name, dirFn) {
   const base = path.normalize(dirFn() + path.sep);
   const full = path.normalize(path.join(dirFn(), name));
   return full.startsWith(base) ? full : null;
+}
+/* A capture name from any window (media library, review window) must resolve
+   inside captures/ and nowhere else. */
+function safeCap(name) { return safeFile(name, CAPDIR); }
+
+/* ===== Screenshot review ==================================================
+ * A region screenshot used to end as a toast + a file in captures/, so saving
+ * the picture meant: open the bubble → media library → find it → download. Now
+ * the shot ENDS in front of the user: a small always-on-top card with the image
+ * and a Download button that writes straight into the Downloads folder. The
+ * capture still lands in captures/ (the library and the message attachments
+ * keep working exactly as before); this window is just the last step made
+ * obvious.
+ */
+function reviewFile() {
+  if (!reviewName) return null;
+  const f = safeCap(reviewName);
+  return f && fs.existsSync(f) ? f : null;
+}
+
+/** A free path for `name` inside `dir` (never overwrites what is already there). */
+function uniqueInDir(dir, name) {
+  const ext = path.extname(name);
+  const base = path.basename(name, ext);
+  let full = path.join(dir, name);
+  for (let i = 1; fs.existsSync(full) && i < 1000; i++) full = path.join(dir, `${base} (${i})${ext}`);
+  return full;
+}
+
+/* Save a copy into the Downloads folder — no dialog, which is the whole point
+   of "download it right away". */
+function copyCaptureToDownloads() {
+  const src = reviewFile();
+  if (!src) return { ok: false, error: "missing" };
+  try {
+    const dir = app.getPath("downloads");
+    fs.mkdirSync(dir, { recursive: true });
+    const dest = uniqueInDir(dir, path.basename(src));
+    fs.copyFileSync(src, dest);
+    return { ok: true, path: dest };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+/* Copy is what makes a shot pasteable anywhere. writeImage() puts the picture
+   on the clipboard as image/png — the format browsers, documents and chat
+   boxes paste — and nothing else may be written afterwards: an extra
+   writeBuffer() (for "just one more format") replaces the whole clipboard and
+   leaves it empty. Verified on Windows, see reviewtest. */
+function copyCaptureToClipboard() {
+  const src = reviewFile();
+  if (!src) return { ok: false, error: "missing" };
+  try {
+    const img = nativeImage.createFromPath(src);
+    if (img.isEmpty()) return { ok: false, error: "unreadable" };
+    clipboard.writeImage(img);
+    return { ok: true, size: img.getSize(), formats: clipboard.availableFormats() };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+/* "Save as…" — the file picker. Shared with the media library's download
+   button so both paths behave identically. */
+async function saveCaptureAs(name) {
+  const src = safeCap(name);
+  if (!src || !fs.existsSync(src)) return { ok: false, error: "missing" };
+  try {
+    const ext = path.extname(name).toLowerCase();
+    const r = await askSave({
+      title: "Save capture",
+      defaultPath: path.join(app.getPath("downloads"), path.basename(name)),
+      filters: ext === ".png"
+        ? [{ name: "PNG", extensions: ["png"] }]
+        : ext === ".webm"
+          ? [{ name: "WebM", extensions: ["webm"] }]
+          : [{ name: "File", extensions: [ext.slice(1) || "*"] }]
+    });
+    if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+    fs.copyFileSync(src, r.filePath);
+    return { ok: true, path: r.filePath };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+function closeShotReview() {
+  if (!reviewWin || reviewWin.isDestroyed()) return false;
+  try { reviewWin.close(); } catch {}
+  return true;
+}
+
+/**
+ * Show a just-taken screenshot. Sized from the image's own aspect ratio, centred
+ * on the display the shot came from, always on top (like every snipping tool),
+ * out of the taskbar, and replaced — never multiplied — by a newer shot.
+ * Returns false when the file is not there, so the caller can still fall back
+ * to a toast.
+ */
+function openShotReview(name) {
+  const src = safeCap(name);
+  if (!src || !fs.existsSync(src)) return false;
+  let size = { width: 0, height: 0 };
+  try { size = nativeImage.createFromPath(src).getSize(); } catch {}
+  try {
+    if (reviewWin && !reviewWin.isDestroyed()) reviewWin.close();
+  } catch {}
+  reviewName = name;
+  reviewNote = "";
+  reviewMiniBounds = null;
+  try { reviewBase = fs.readFileSync(src); } catch { reviewBase = null; }
+  let wa = screen.getPrimaryDisplay().workArea;
+  try { wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea; } catch {}
+  const CHROME_H = 128;                       // header + footer + padding
+  const iw = Math.max(1, size.width || 800), ih = Math.max(1, size.height || 600);
+  const maxW = Math.round(wa.width * 0.7), maxH = Math.round(wa.height * 0.7);
+  const scale = Math.min(1, maxW / iw, Math.max(0.1, (maxH - CHROME_H) / ih));
+  const cw = Math.max(380, Math.round(iw * scale));
+  const ch = Math.max(240, Math.round(ih * scale) + CHROME_H);
+  try {
+    reviewWin = new BrowserWindow({
+      width: cw, height: ch,
+      x: Math.round(wa.x + (wa.width - cw) / 2),
+      y: Math.round(wa.y + (wa.height - ch) / 2),
+      frame: false, transparent: true, resizable: false, minimizable: false,
+      maximizable: false, fullscreenable: false, alwaysOnTop: true, skipTaskbar: true,
+      show: false, title: "Screenshot", icon: APP_ICON, backgroundColor: "#00000000",
+      webPreferences: {
+        preload: path.join(__dirname, "review-preload.js"),
+        contextIsolation: true, nodeIntegration: false, sandbox: false
+      }
+    });
+    /* Deliberately NOT content-protected: on Windows a protected transparent
+       window renders as an opaque black rectangle, which is exactly what the
+       floating bubble suffered from. A review that always comes up black would
+       be worse than one that shows up inside a recording. */
+    reviewWin.setAlwaysOnTop(true, "floating");
+    reviewWin.loadFile(path.join(__dirname, "review.html"), {
+      query: {
+        name,
+        w: String(size.width || ""),
+        h: String(size.height || ""),
+        bytes: String((() => { try { return fs.statSync(src).size; } catch { return 0; } })())
+      }
+    });
+    reviewWin.once("ready-to-show", () => {
+      if (reviewWin && !reviewWin.isDestroyed()) { reviewWin.show(); reviewWin.focus(); }
+    });
+    reviewWin.on("closed", () => { reviewWin = null; });
+    return true;
+  } catch (err) {
+    console.warn("[Main] review window failed:", (err && err.message) || err);
+    reviewWin = null;
+    return false;
+  }
 }
 
 const MIME = { ".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".gif":"image/gif",".webp":"image/webp",
@@ -419,17 +586,18 @@ function registerHandlers() {
   ipcMain.handle("theme:set", (_, mode) => { nativeTheme.themeSource = mode; });
 
   /* ---- Screenshots / screen recordings (rail tools + media library) ---- */
-  function safeCap(name) {
-    if (!name || typeof name !== "string" || /[\/\\]/.test(name) || name.includes("..")) return null;
-    const base = path.normalize(CAPDIR() + path.sep);
-    const full = path.normalize(path.join(CAPDIR(), name));
-    return full.startsWith(base) ? full : null;
-  }
-
   function captureStamp() {
     const d = new Date();
     const p = n => String(n).padStart(2, "0");
     return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  }
+
+  /* A screenshot is named like a date: day-month-year, then hour-minute-second,
+     then the word "shot" — 14-10-2026_18-05-09-shot.png. */
+  function shotStamp() {
+    const d = new Date();
+    const p = n => String(n).padStart(2, "0");
+    return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
   }
 
   ipcMain.handle("capture:list", () => {
@@ -477,23 +645,111 @@ function registerHandlers() {
     } catch { return { ok: false }; }
   });
 
-  ipcMain.handle("capture:download", async (_, name) => {
-    const src = safeCap(name);
-    if (!src || !fs.existsSync(src)) return { ok: false, error: "missing" };
+  ipcMain.handle("capture:download", (_, name) => saveCaptureAs(name));
+
+  /* ===== The screenshot review window =====
+     Download writes straight into Downloads (no dialog — that is the one-click
+     path), Save as… opens the picker, Copy goes to the clipboard, Delete
+     discards the capture and tells every window so an open media library drops
+     the card instead of showing a file that is gone. */
+  ipcMain.handle("review:download", () => copyCaptureToDownloads());
+  ipcMain.handle("review:saveAs", () => saveCaptureAs(reviewName));
+  ipcMain.handle("review:copy", () => copyCaptureToClipboard());
+  ipcMain.handle("review:reveal", () => {
+    const f = reviewFile();
+    if (!f) return { ok: false, error: "missing" };
+    try { shell.showItemInFolder(f); return { ok: true, path: f }; }
+    catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  });
+  ipcMain.handle("review:remove", () => {
+    const f = reviewFile();
+    const name = reviewName;
+    if (!f) return { ok: false, error: "missing" };
+    try { fs.unlinkSync(f); } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+    BrowserWindow.getAllWindows().forEach(w => {
+      if (!w.isDestroyed()) { try { w.webContents.send("capture:removed", { name }); } catch {} }
+    });
+    closeShotReview();
+    return { ok: true, name };
+  });
+  ipcMain.on("review:close", () => closeShotReview());
+  ipcMain.handle("review:getpos", () => {
+    if (!reviewWin || reviewWin.isDestroyed()) return null;
+    const [x, y] = reviewWin.getPosition();
+    return { x, y };
+  });
+  ipcMain.on("review:dragto", (_, pos) => {
+    if (!reviewWin || reviewWin.isDestroyed()) return;
+    if (!pos || typeof pos.x !== "number" || typeof pos.y !== "number") return;
+    // Never let the card be dragged somewhere it cannot be grabbed back from.
     try {
-      const saveOpts = {
-        title: "Save capture",
-        defaultPath: path.join(app.getPath("downloads"), path.basename(name)),
-        filters: path.extname(name).toLowerCase() === ".png"
-          ? [{ name: "PNG", extensions: ["png"] }]
-          : path.extname(name).toLowerCase() === ".webm"
-            ? [{ name: "WebM", extensions: ["webm"] }]
-            : [{ name: "File", extensions: [path.extname(name).slice(1) || "*"] }]
-      };
-      const r = await askSave(saveOpts);
-      if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-      fs.copyFileSync(src, r.filePath);
-      return { ok: true, path: r.filePath };
+      const b = reviewWin.getBounds();
+      const wa = screen.getDisplayNearestPoint({ x: Math.round(pos.x), y: Math.round(pos.y) }).workArea;
+      const minVis = 60;
+      const x = Math.min(Math.max(Math.round(pos.x), wa.x - b.width + minVis), wa.x + wa.width - minVis);
+      const y = Math.min(Math.max(Math.round(pos.y), wa.y - b.height + minVis), wa.y + wa.height - minVis);
+      reviewWin.setPosition(x, y);
+    } catch { /* multi-monitor edge → use the raw position */
+      try { reviewWin.setPosition(Math.round(pos.x), Math.round(pos.y)); } catch {}
+    }
+  });
+
+  /* Minimize the card. It lives out of the taskbar (skipTaskbar), so a real
+     minimize would be a one-way trip with no button to bring it back: the card
+     collapses to its title bar instead and the saved bounds restore it exactly
+     where it was. */
+  ipcMain.handle("review:setmini", (_, arg) => {
+    if (!reviewWin || reviewWin.isDestroyed()) return { ok: false };
+    const want = !!(arg && arg.mini);
+    try {
+      if (want && !reviewMiniBounds) {
+        const b = reviewWin.getBounds();
+        reviewMiniBounds = { x: b.x, y: b.y, width: b.width, height: b.height };
+        const h = Math.max(32, Math.round((arg && arg.h) || 48));
+        reviewWin.setBounds({ x: b.x, y: b.y, width: b.width, height: h });
+      } else if (!want && reviewMiniBounds) {
+        reviewWin.setBounds(reviewMiniBounds);
+        reviewMiniBounds = null;
+      }
+      return { ok: true, mini: !!reviewMiniBounds, bounds: reviewWin.getBounds() };
+    } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  });
+
+  /* The pristine capture as bytes. The card draws its note canvas from a
+     same-origin blob built out of these, because drawing the local-file://
+     image directly taints that canvas and toDataURL() then throws. The bytes
+     kept at open time are used, so the answer stays pristine even after a note
+     has replaced the file. */
+  ipcMain.handle("review:bytes", () => {
+    if (reviewBase && reviewBase.length) return new Uint8Array(reviewBase);
+    const f = reviewFile();
+    if (!f) return null;
+    try { return new Uint8Array(fs.readFileSync(f)); } catch { return null; }
+  });
+
+  /* The note is printed INTO the picture: the card bakes it with a canvas and
+     hands over the finished PNG, which replaces the stored capture — so the
+     file on disk, the card and the media library never disagree. Clearing the
+     note puts the pristine shot back (its bytes were kept when the card
+     opened), and an unchanged note is not written twice. */
+  ipcMain.handle("review:annotate", (_, payload) => {
+    const f = reviewFile();
+    if (!f) return { ok: false, error: "missing" };
+    const note = String((payload && payload.note) || "").trim();
+    let bytes = null;
+    if (payload && payload.buffer) { try { bytes = Buffer.from(payload.buffer); } catch { bytes = null; } }
+    if (note && (!bytes || !bytes.length)) return { ok: false, error: "empty" };
+    if (!note && !reviewBase) return { ok: false, error: "no original" };
+    try {
+      if (note !== reviewNote) {
+        fs.writeFileSync(f, note ? bytes : reviewBase);
+        reviewNote = note;
+        BrowserWindow.getAllWindows().forEach(w => {
+          if (w.isDestroyed() || w === reviewWin) return;
+          try { w.webContents.send("capture:updated", { name: reviewName }); } catch {}
+        });
+      }
+      return { ok: true, note, size: fs.statSync(f).size };
     } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
   });
 
@@ -525,6 +781,9 @@ function registerHandlers() {
   let shotParkedWins = [];
   function parkOverlaysForShot() {
     restoreShotOverlays();
+    /* A review window from an earlier shot is always-on-top, so it would be
+       baked straight into the new picture. It is about to be replaced anyway. */
+    closeShotReview();
     for (const w of [pipWin, camWin]) {
       if (!w || w.isDestroyed() || !w.isVisible()) continue;
       const b = w.getBounds();
@@ -858,12 +1117,17 @@ function registerHandlers() {
       }
       const cropped = shotImage.crop({ x: sx, y: sy, width: sw, height: sh });
       ensure();
-      const name = `shot-${captureStamp()}.png`;
+      const name = `${shotStamp()}-shot.png`;
       fs.writeFileSync(path.join(CAPDIR(), name), cropped.toPNG());
       if (shotWin && !shotWin.isDestroyed()) shotWin.close();
-      // Let every open window know a new capture landed (refresh gallery).
+      /* The review window IS the feedback for a screenshot: preview + Download
+         in the face of the user, instead of "Screenshot saved ✓" and a hunt
+         through the media library. Everything else is told a capture landed so
+         an open gallery refreshes. */
+      const reviewed = openShotReview(name);
       BrowserWindow.getAllWindows().forEach(w => {
-        if (!w.isDestroyed()) w.webContents.send("capture:saved", { name, kind: "image" });
+        if (w.isDestroyed() || w === reviewWin) return;
+        try { w.webContents.send("capture:saved", { name, kind: "image", review: reviewed }); } catch {}
       });
     } catch (err) {
       console.error("[shot] save failed", err);
@@ -1392,6 +1656,7 @@ function registerHandlers() {
       pipMaximized = false;
       pipPreMaxBounds = null;
       pipWin = null;
+      refreshTrayMenu(); // the tray menu's bubble row follows the bar
     });
     pipWin.webContents.on("did-finish-load", () => {
       if (!pipWin || pipWin.isDestroyed()) return;
@@ -1425,6 +1690,7 @@ function registerHandlers() {
     try { w.setAlwaysOnTop(true); w.setSkipTaskbar(true); } catch {}
     try { w.showInactive(); } catch {}
     try { w.webContents.send("pip:state", "collapsed"); } catch {}
+    refreshTrayMenu();
   });
   /* Rail toggle: never kill the floating window by accident.
      closed → the BAR, docked (so the floating bar really "starts" on one side)
@@ -1496,20 +1762,21 @@ function registerHandlers() {
   });
   /* "Start with Windows" toggle — returns what the OS really reports back. */
   ipcMain.handle("app:startAtLogin", (e, on) => {
-    try {
-      app.setLoginItemSettings({ openAtLogin: !!on, path: process.execPath, args: [] });
-      return !!(app.getLoginItemSettings() || {}).openAtLogin;
-    } catch (err) {
-      console.warn("[Main] start-at-login failed:", (err && err.message) || err);
-      return false;
-    }
+    const state = setLoginItem(on);
+    refreshTrayMenu();
+    return state;
   });
   ipcMain.on("pip:close", () => {
     if (!alive(pipWin)) return;
     pipWin.close();
     /* Closing the bar must never leave the app with nothing on screen: if the
-       chat window was tucked away into the bar, bring it back. */
+       chat window was tucked away into the bar, bring it back. When there is
+       no chat window at all (a boot start, or after the chat was closed) the
+       app is allowed to live in the tray — but say so, once, instead of
+       looking like it just died. */
     if (alive(win) && !win.isVisible()) { try { win.show(); win.focus(); } catch {} }
+    else if (!alive(win)) trayBalloon("Loopback is still running", "It is in the tray, next to the clock — click the icon to open the chat.");
+    refreshTrayMenu();
   });
   // Renderer may miss the push on did-finish-load (race with initPipMode);
   // it pulls the current orientation once its listener is registered.
@@ -1713,11 +1980,174 @@ function registerHandlers() {
   ipcMain.on("monitor:close", () => { stopLiveHub(); if (alive(monitorWin)) monitorWin.close(); });
 }
 
+/* ===== System tray (the app runs in the background) ===================
+ * The tray icon is what makes "runs in the background" real instead of a
+ * promise: with it up, the process outlives every window (window-all-closed
+ * below, `python`-style background app), the way back in is one click away
+ * rather than hunting for the bubble, and a PC that boots is never greeted by
+ * a full window it did not ask for — the chat renderer is created the moment
+ * somebody wants it, which is also the single biggest memory saving available
+ * to an Electron app that nobody is looking at.
+ */
+const TRAY_TOOLTIP = "Loopback — notes to self";
+
+function trayIcon() {
+  try {
+    const img = nativeImage.createFromPath(APP_ICON);
+    if (img.isEmpty()) return img;
+    // The tray wants 16px on Windows: letting it rescale the 256px app icon
+    // gives a blurred smudge next to the crisp system icons.
+    return img.resize({ width: 16, height: 16, quality: "best" });
+  } catch { return nativeImage.createEmpty(); }
+}
+
+/* Bring the chat window up (building it when it is gone) — the tray menu, the
+   tray click and second-instance all end up here. */
+function showChatWindow() {
+  try {
+    const w = createWindow();
+    if (!alive(w)) return;
+    if (w.isMinimized()) w.restore();
+    w.show();
+    w.focus();
+  } catch (err) { console.warn("[Main] open from tray failed:", (err && err.message) || err); }
+}
+
+/* A one-off Windows balloon so "I closed the bubble and the app vanished" has
+   an answer on screen. Never nags twice in a session. */
+function trayBalloon(title, body) {
+  if (trayBalloonShown || !tray || tray.isDestroyed()) return;
+  trayBalloonShown = true;
+  try { tray.displayBalloon({ title, content: body, iconType: "info" }); } catch {}
+}
+
+/* Push the saved settings into every window — same channel Settings itself
+   uses, so a toggle flipped from the tray menu shows up in the panel too. */
+function broadcastSettings() {
+  let cfg = {};
+  try { cfg = loadCfg(); } catch {}
+  BrowserWindow.getAllWindows().forEach(w => {
+    if (!w.isDestroyed()) { try { w.webContents.send("settings:changed", cfg); } catch {} }
+  });
+}
+
+/* Rebuilt on every change so the checkmarks and the two labels always describe
+   what is true right now (the menu is the app's only UI when nothing is open). */
+function refreshTrayMenu() {
+  if (!tray || tray.isDestroyed()) return;
+  let cfg = {};
+  try { cfg = loadCfg(); } catch {}
+  const startAtLogin = loginItemRegistered();
+  const barOpen = alive(pipWin);
+  const chatVisible = alive(win) && win.isVisible();
+  const save = patch => {
+    try { saveCfg(Object.assign(loadCfg(), patch)); } catch {}
+    broadcastSettings();
+    refreshTrayMenu();
+  };
+
+  trayMenu = [
+    { label: chatVisible ? "Focus Loopback" : "Open Loopback", click: () => { showChatWindow(); setTimeout(refreshTrayMenu, 400); } },
+    {
+      label: barOpen ? "Hide chat bubble" : "Show chat bubble",
+      click: () => {
+        if (alive(pipWin)) ipcMain.emit("pip:close");
+        else ipcMain.emit("pip:openbar", {}, pipDockSide());
+        setTimeout(refreshTrayMenu, 400);
+      }
+    },
+    { type: "separator" },
+    {
+      label: "Start with Windows", type: "checkbox", checked: startAtLogin,
+      click: mi => save({ startAtLogin: setLoginItem(mi.checked) })
+    },
+    {
+      label: "Keep running in the tray", type: "checkbox",
+      checked: cfg.runInBackground !== false,
+      click: mi => save({ runInBackground: !!mi.checked })
+    },
+    { type: "separator" },
+    { label: "Quit Loopback", click: () => { isQuitting = true; app.quit(); } }
+  ];
+  tray.setContextMenu(Menu.buildFromTemplate(trayMenu));
+}
+
+/* Test seam for traytest.js — the tray handle and the menu template it was
+   built from, so "the app lives in the tray" can be asserted without a screen.
+   Nothing in the app itself reads this. */
+function exposeTrayForTests() {
+  global.__loopbackTray = {
+    tray: () => tray,
+    menu: () => trayMenu,
+    startedHidden: STARTED_HIDDEN,
+    alive: () => !isQuitting
+  };
+}
+
+function createTray() {
+  if (tray && !tray.isDestroyed()) return tray;
+  try { tray = new Tray(trayIcon()); }
+  catch (err) {
+    console.warn("[Main] tray unavailable:", (err && err.message) || err);
+    tray = null;
+    return null;
+  }
+  tray.setToolTip(TRAY_TOOLTIP);
+  refreshTrayMenu();
+  /* Left click: the chat, or away with it when it is already on screen. Right
+     click brings the menu by itself (refreshed first so it is never stale). */
+  tray.on("click", () => {
+    if (alive(win) && win.isVisible() && !win.isMinimized()) { try { win.hide(); } catch {} }
+    else showChatWindow();
+    setTimeout(refreshTrayMenu, 400);
+  });
+  tray.on("right-click", () => refreshTrayMenu());
+  exposeTrayForTests();
+  return tray;
+}
+
 /* "Start with Windows" — re-applied on every launch so a reinstall (which
-   moves the exe) can never leave a stale login entry behind. */
+   moves the exe) can never leave a stale login entry behind. The login item
+   carries `--autostart`, so a boot launch comes up hidden (tray + floating bar)
+   instead of a window nobody asked for. Default: ON — the app is meant to be
+   already there, with its chat bubble, when the PC comes up. The OS stays the
+   source of truth for what is actually registered. */
+/* Which executable a login entry should point at.
+   The portable build is a wrapper: `process.execPath` is the copy it unpacked
+   into %TEMP%, so registering that would leave an entry aimed at a folder
+   Windows may wipe at any time (and which is gone after a reboot). the
+   wrapper tells us where the real portable exe lives — that is the file to
+   start. The installed build has no such variable and starts its own exe. */
+function loginItemTarget() {
+  return process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+}
+function loginItemOpts() {
+  return { path: loginItemTarget(), args: [AUTOSTART_FLAG] };
+}
+
+/* What the OS really reports for our login entry (the tray menu and Settings
+   show this, never what we merely wrote). */
+function loginItemRegistered() {
+  try { return !!(app.getLoginItemSettings(loginItemOpts()) || {}).openAtLogin; }
+  catch { return false; }
+}
+
+function setLoginItem(on) {
+  /* Registered only by the installed/portable build: in a dev run
+     process.execPath is electron.exe, and a login entry pointing at that —
+     with no app path — would just break at the next boot. */
+  if (!app.isPackaged) return false;
+  try {
+    app.setLoginItemSettings(Object.assign({ openAtLogin: !!on }, loginItemOpts()));
+    return loginItemRegistered();
+  } catch (err) {
+    console.warn("[Main] login item failed:", (err && err.message) || err);
+    return false;
+  }
+}
+
 function applyLoginItem(cfg) {
-  try { app.setLoginItemSettings({ openAtLogin: !!cfg.startAtLogin, path: process.execPath, args: [] }); }
-  catch (err) { console.warn("[Main] login item failed:", (err && err.message) || err); }
+  setLoginItem(((cfg || {}).startAtLogin) !== false);
 }
 
 /* Desktop-only startup extras (skipped when a smoke test boots this file):
@@ -1871,8 +2301,17 @@ app.whenReady().then(() => {
     });
   });
 
-  createWindow();
-  if (!IS_TEST_BOOT) startupExtras();
+  /* A boot-time launch (the login item's --autostart) comes up in the
+     background: the tray and the floating bar, and the chat window only once
+     it is asked for. That is what "already running when the PC starts" should
+     feel like, and it keeps a hidden chat renderer — the largest single chunk
+     of the app's memory — off a machine nobody is looking at it on. */
+  if (!STARTED_HIDDEN) createWindow();
+  if (!IS_TEST_BOOT) { createTray(); startupExtras(); }
+  else if (TRAY_IN_TEST) {
+    createTray();
+    if (STARTED_HIDDEN) startupExtras();
+  }
 });
 
 /* Launching the app again (shortcut, taskbar, second click on the exe) must
@@ -1882,8 +2321,20 @@ app.on("second-instance", () => {
   try { createWindow(); }
   catch (err) { console.warn("[Main] second-instance failed:", (err && err.message) || err); }
 });
+app.on("before-quit", () => { isQuitting = true; });
 app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch {} });
-app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+app.on("window-all-closed", () => {
+  if (process.platform === "darwin") return;
+  /* The tray keeps the app alive with nothing on screen — that IS the
+     background mode. Turning it off (or quitting from the tray menu) restores
+     the old "closing the last window quits" behaviour. */
+  if (tray && !tray.isDestroyed() && !isQuitting) {
+    let keep = true;
+    try { keep = loadCfg().runInBackground !== false; } catch {}
+    if (keep) return;
+  }
+  app.quit();
+});
 app.on("activate", () => {
   try { createWindow(); }
   catch (err) { console.warn("[Main] activate failed:", (err && err.message) || err); }

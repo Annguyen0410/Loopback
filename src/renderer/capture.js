@@ -846,7 +846,10 @@ export function initCapture() {
 
   if (window.api.capture.onSaved) {
     window.api.capture.onSaved(info => {
-      if (info && info.kind === "image") toast("Screenshot saved", "Saved \u2713");
+      /* A screenshot now ends in its own review window (preview + Download), so
+         a toast on top of it would just be noise. If the review window could
+         not be shown, the toast is the only feedback left — keep it for that. */
+      if (info && info.kind === "image" && !info.review) toast("Screenshot saved", "Saved \u2713");
     });
   }
 

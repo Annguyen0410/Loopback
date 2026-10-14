@@ -108,8 +108,17 @@ export function initFloatingSettings() {
     toast("Floating bar docks " + settings.pipDock, "Dock " + settings.pipDock);
   });
 
+  // Every toggle is re-read from settings, so the tray menu (which writes the
+  // same settings.json) and this panel can never disagree.
+  const syncToggles = () => toggles.forEach(t => {
+    if (t.el) t.el.checked = settings[t.key] === undefined ? t.fallback : !!settings[t.key];
+  });
+  const toggles = [];
+
   const bindToggle = (id, key, fallback, note) => {
     const el = $(id);
+    const entry = { el, key, fallback };
+    toggles.push(entry);
     if (!el) return;
     el.checked = settings[key] === undefined ? fallback : !!settings[key];
     el.addEventListener("change", async () => {
@@ -128,8 +137,19 @@ export function initFloatingSettings() {
     on => on ? "The floating bar will be waiting when the app opens" : "The floating bar won't open on its own");
   bindToggle("settingPipOnMinimize", "pipOnMinimize", true,
     on => on ? "Minimizing the app shows the floating bar" : "Minimizing the app just hides it");
-  bindToggle("settingStartAtLogin", "startAtLogin", false,
-    on => on ? "Loopback will start with Windows" : "Loopback won't start with Windows");
+  bindToggle("settingStartAtLogin", "startAtLogin", true,
+    on => on ? "Loopback will start with Windows, into the tray and the bubble" : "Loopback won't start with Windows");
+  bindToggle("settingRunInBackground", "runInBackground", true,
+    on => on ? "Loopback keeps running in the tray when no window is open" : "Closing every window will quit Loopback");
+
+  if (window.api.onSettingsChanged) {
+    window.api.onSettingsChanged(data => {
+      if (!data) return;
+      Object.assign(settings, data);
+      syncToggles();
+    });
+  }
+  syncToggles();
 }
 
 export function initSettingsPanel({ onClearAll } = {}) {

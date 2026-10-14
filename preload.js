@@ -101,6 +101,12 @@ contextBridge.exposeInMainWorld("api", {
     recordingActive: on => ipcRenderer.invoke("capture:recordingActive", !!on),
     broadcast: info => ipcRenderer.send("capture:broadcast", info),
     onSaved: cb => ipcRenderer.on("capture:saved", (e, info) => cb(info)),
+    // The review window deleted a capture it had just taken — an open media
+    // library must drop that card instead of showing a file that is gone.
+    onRemoved: cb => ipcRenderer.on("capture:removed", (e, info) => cb(info)),
+    // The review card printed a note into the capture it just took: the card on
+    // screen is now the old picture and has to be re-read.
+    onUpdated: cb => ipcRenderer.on("capture:updated", (e, info) => cb(info)),
     // A region screenshot that produced nothing (clicked instead of dragging,
     // crop failed…) — the overlay would otherwise vanish silently.
     onFailed: cb => ipcRenderer.on("shot:failed", (e, info) => cb(info))

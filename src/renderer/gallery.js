@@ -26,9 +26,14 @@ function fmtTime(ts) {
   } catch { return ""; }
 }
 
-function fileUrl(name) {
-  if (window.api && window.api.fileUrl) return window.api.fileUrl(name);
-  return "local-file:///" + encodeURIComponent(name);
+/* `v` busts the URL cache: a capture can change under its own name (the review
+   card prints a note into the picture it just took), and the same URL would
+   otherwise keep showing the old bitmap. */
+function fileUrl(name, v) {
+  const base = window.api && window.api.fileUrl
+    ? window.api.fileUrl(name)
+    : "local-file:///" + encodeURIComponent(name);
+  return v ? base + "?v=" + encodeURIComponent(v) : base;
 }
 
 function filtered() {
@@ -55,7 +60,7 @@ function renderGrid() {
       const im = document.createElement("img");
       im.loading = "lazy";
       im.alt = item.name;
-      im.src = fileUrl(item.name);
+      im.src = fileUrl(item.name, item.mtime);
       thumb.append(im);
     } else {
       thumb.classList.add("video");
@@ -66,7 +71,7 @@ function renderGrid() {
       vid.preload = "metadata";
       vid.muted = true;
       vid.playsInline = true;
-      vid.src = fileUrl(item.name);
+      vid.src = fileUrl(item.name, item.mtime);
       thumb.prepend(vid);
     }
 
@@ -135,12 +140,12 @@ function preview(item) {
   body.innerHTML = "";
   if (item.kind === "image") {
     const im = document.createElement("img");
-    im.src = fileUrl(item.name);
+    im.src = fileUrl(item.name, item.mtime);
     im.alt = item.name;
     body.append(im);
   } else {
     const vid = document.createElement("video");
-    vid.src = fileUrl(item.name);
+    vid.src = fileUrl(item.name, item.mtime);
     vid.controls = true;
     vid.autoplay = true;
     vid.playsInline = true;
@@ -229,10 +234,16 @@ export function initGallery() {
     }
   });
 
-  if (window.api && window.api.capture && window.api.capture.onSaved) {
-    window.api.capture.onSaved(() => {
-      const p = $("mediaPanel");
-      if (p && !p.hidden) refresh();
-    });
-  }
+  /* A capture landing, being thrown away, or being annotated with a note (all
+     of them can happen from another window: the shot just taken, the review
+     card's Delete, the review card's note) — a library that is on screen
+     follows along. */
+  const followDisk = () => {
+    const p = $("mediaPanel");
+    if (p && !p.hidden) refresh();
+  };
+  const capture = (window.api && window.api.capture) || {};
+  [capture.onSaved, capture.onRemoved, capture.onUpdated].forEach(hook => {
+    if (hook) hook(followDisk);
+  });
 }

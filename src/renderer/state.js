@@ -20,7 +20,8 @@ export const settings = {
   pipOnStartup: true,   // drop the bar on its dock when the app launches
   pipOnMinimize: true,  // minimizing the app shows the bar
   pipDock: "right",     // "left" | "right" — which edge the bar parks on
-  startAtLogin: false,  // Windows login item (app.setLoginItemSettings)
+  startAtLogin: true,   // Windows login item — on by default (boots to the tray)
+  runInBackground: true,// the tray keeps the app alive with no window open
   recQuality: "hd",  // "sd" | "hd" | "fhd"
   recFps: 30,        // 30 | 60
   recCursor: true,   // draw the mouse pointer into the recording

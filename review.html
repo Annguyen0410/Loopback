@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' local-file: data:;">
+  <title>Screenshot</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:transparent;overflow:hidden}
+    body{
+      font:400 13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      color:#e4e6eb;user-select:none;-webkit-user-select:none
+    }
+    .card{
+      height:100vh;display:flex;flex-direction:column;border-radius:14px;overflow:hidden;
+      background:linear-gradient(180deg,#1b1d21,#131518);
+      border:1px solid rgba(255,255,255,.09);
+      box-shadow:0 18px 60px rgba(0,0,0,.55)
+    }
+    /* The header is the drag handle (a frameless transparent window cannot use
+       -webkit-app-region: drag, so it is moved through the IPC the same way the
+       floating bubble is). */
+    header{
+      display:flex;align-items:center;gap:10px;padding:10px 12px;
+      border-bottom:1px solid rgba(255,255,255,.07);cursor:move;flex:0 0 auto
+    }
+    header .t{font-weight:600;font-size:13px;letter-spacing:.2px;white-space:nowrap}
+    header .meta{font-size:11.5px;color:#a7acb3;margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .x{
+      flex:0 0 auto;width:26px;height:26px;border:0;border-radius:50%;cursor:pointer;
+      background:rgba(255,255,255,.08);color:#e4e6eb;font-size:12px;line-height:1
+    }
+    .x:hover{background:rgba(255,255,255,.2)}
+    .x.close:hover{background:rgba(239,68,68,.85);color:#fff}
+    .stage{
+      flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
+      padding:10px 12px;background:rgba(0,0,0,.35)
+    }
+    #shot{
+      max-width:100%;max-height:100%;border-radius:8px;background:#000;
+      box-shadow:0 6px 26px rgba(0,0,0,.45)
+    }
+    .notewrap{flex:0 0 auto;padding:0 12px 10px;background:rgba(0,0,0,.35)}
+    #note{
+      width:100%;border:1px solid rgba(255,255,255,.12);border-radius:9px;
+      padding:8px 10px;background:rgba(255,255,255,.06);color:#e4e6eb;
+      font:400 12.5px/1.3 inherit;outline:none;-webkit-user-select:text;user-select:text
+    }
+    #note::placeholder{color:#878d95}
+    #note:focus{border-color:#0084ff;background:rgba(0,132,255,.12)}
+    footer{
+      flex:0 0 auto;padding:10px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+      border-top:1px solid rgba(255,255,255,.07)
+    }
+    button.act{
+      border:0;border-radius:9px;padding:8px 14px;cursor:pointer;font:600 12.5px/1 inherit;
+      background:rgba(255,255,255,.09);color:#e4e6eb
+    }
+    button.act:hover{background:rgba(255,255,255,.16)}
+    button.act.primary{background:#0084ff;color:#fff}
+    button.act.primary:hover{background:#0073e6}
+    button.act.danger:hover{background:rgba(239,68,68,.9);color:#fff}
+    button.busy{opacity:.55;pointer-events:none}
+    #status{
+      flex:1 1 190px;min-width:0;font-size:11.5px;color:#a7acb3;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+    }
+    #status.ok{color:#7ee0a5}
+    #status.err{color:#ff8b8b}
+    /* Minimized: only the title bar is left, and the window itself is resized to
+       match (main keeps the old bounds and restores them). */
+    body.mini .card{height:auto}
+    body.mini .stage,body.mini .notewrap,body.mini footer{display:none}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <header id="bar">
+      <span class="t">Screenshot</span>
+      <span class="meta" id="meta">—</span>
+      <button class="x" id="btnMin" type="button" title="Minimize (collapse to the title bar)">&#x2212;</button>
+      <button class="x close" id="btnClose" type="button" title="Close (Esc)">&#x2715;</button>
+    </header>
+    <div class="stage"><img id="shot" alt="Screenshot preview"></div>
+    <div class="notewrap">
+      <input id="note" type="text" maxlength="200" spellcheck="false" autocomplete="off"
+             placeholder="Note — it gets printed on the picture">
+    </div>
+    <footer>
+      <button class="act primary" id="btnDownload" type="button" title="Save a copy into your Downloads folder">Download</button>
+      <button class="act" id="btnCopy" type="button" title="Copy the picture — paste it into a page, a document or a chat">Copy</button>
+      <button class="act" id="btnSaveAs" type="button" title="Choose where to save it">Save as…</button>
+      <button class="act" id="btnReveal" type="button" title="Show the stored copy in its folder">Show in folder</button>
+      <button class="act danger" id="btnDelete" type="button" title="Delete this screenshot">Delete</button>
+      <div id="status"></div>
+    </footer>
+  </div>
+  <script src="review.js"></script>
+</body>
+</html>
