@@ -12,8 +12,9 @@
  *   6. the note typed on the card is printed INTO the picture: the stored
  *      capture becomes the annotated PNG (so Download hands that out), and
  *      clearing the note puts the pristine shot back byte for byte
- *   7. the minimize button collapses the card to its title bar and restores it
- *      exactly where it was (it has no taskbar button to come back from)
+ *   7. the minimize button really minimizes the card — it drops to the taskbar
+ *      (the card keeps a taskbar button for exactly this) and comes back from
+ *      there at the same size and place
  *   8. the name on disk reads day-month-year_hour-minute-second-shot.png, and
  *      Copy really leaves an image/png on the clipboard — the format a browser,
  *      a document or a chat box pastes
@@ -179,7 +180,7 @@ app.whenReady().then(async () => {
 
     const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
     const rb = review.getBounds();
-    check("the card is on top, out of the taskbar, and fits the screen",
+    check("the card floats on top, is on screen, and fits the screen",
       review.isAlwaysOnTop() === true && review.isVisible() === true &&
       rb.width <= wa.width + 1 && rb.height <= wa.height + 1 &&
       rb.x >= wa.x - 2 && rb.y >= wa.y - 2,
@@ -188,36 +189,22 @@ app.whenReady().then(async () => {
         alwaysOnTop: review.isAlwaysOnTop(), visible: review.isVisible()
       });
 
-    /* ---- 1b. minimize collapses the card to its title bar --------------- */
+    /* ---- 1b. minimize really drops the card to the taskbar --------------- */
     const full = review.getBounds();
-    const clickMin = () => review.webContents.executeJavaScript("document.getElementById('btnMin').click()");
-    await clickMin();
-    const collapsed = await waitFor(() => {
-      const b = review.getBounds();
-      return b.height < full.height - 40 ? b : null;
-    }, 20, 150);
-    const miniDom = await review.webContents.executeJavaScript(`(function(){
-      const stage = document.querySelector('.stage'), foot = document.querySelector('footer');
-      const card = document.querySelector('.card');
-      const bar = document.getElementById('bar');
-      return {
-        card: card ? Math.round(card.getBoundingClientRect().height) : -1,
-        stage: stage ? getComputedStyle(stage).display : '?',
-        footer: foot ? getComputedStyle(foot).display : '?',
-        bar: bar ? Math.round(bar.getBoundingClientRect().height) : -1
-      };
-    })()`);
-    check("the minimize button collapses the card down to its title bar",
-      !!collapsed && collapsed.width === full.width &&
-      miniDom.stage === "none" && miniDom.footer === "none" && miniDom.bar > 10 &&
-      miniDom.card <= collapsed.height + 1,
-      { collapsed, miniDom });
-    await clickMin();
+    await review.webContents.executeJavaScript("document.getElementById('btnMin').click()");
+    const minimized = await waitFor(() => (review.isMinimized() ? true : null), 25, 150);
+    check("the minimize button drops the card to the taskbar",
+      minimized === true,
+      { minimized: review.isMinimized(), visible: review.isVisible() });
+    /* The card keeps a taskbar button (skipTaskbar: false) and clicking that
+       button is what brings it back — restore() is exactly what Windows does
+       when the taskbar button is pressed, so this checks the way back exists. */
+    review.restore();
     const back = await waitFor(() => {
       const b = review.getBounds();
-      return b.height === full.height ? b : null;
-    }, 20, 150);
-    check("pressing it again brings the whole card back exactly where it was",
+      return b.height === full.height && review.isMinimized() === false ? b : null;
+    }, 25, 150);
+    check("the taskbar button brings the whole card back exactly where it was",
       !!back && back.x === full.x && back.y === full.y &&
       back.width === full.width && back.height === full.height,
       { full, back });

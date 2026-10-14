@@ -168,11 +168,12 @@ empty folder: `mkdir assets`.
   type in the note line and the text is printed under the shot as a caption
   strip (baked with a canvas, so it is in the stored capture and in everything
   Download / Copy / Save as… hand out; clear the note and the pristine shot
-  comes back byte for byte). The **−** button beside the close button collapses
-  the card to its title bar — it lives out of the taskbar, so a real minimize
-  would be a one-way trip — and pressing it again restores it exactly where it
-  was. **Copy** leaves the picture on the clipboard as `image/png`, which is
-  what a web page, a document or a chat box pastes with `Ctrl+V`.
+  comes back byte for byte). The **−** button beside the close button is a real
+  minimize: the card **drops down to the taskbar** like any other window (it
+  keeps a taskbar button for exactly that) and the taskbar button brings it back
+  at the same size and place. **Copy** leaves the picture on the clipboard as
+  `image/png`, which is what a web page, a document or a chat box pastes with
+  `Ctrl+V`.
 - **Screenshot names read like a diary** — `14-10-2026_18-05-09-shot.png`:
   day-month-year, hour-minute-second, then the word *shot*.
 - **Mini recording panel in the floating menu** (⚙ on the pill or in the bubble
@@ -383,8 +384,9 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
   note grows the stored capture by the caption strip, the card shows the
   annotated picture itself, and the note's letters are counted **in the pixels**
   of the saved PNG, not just in the metadata; clearing the note restores the
-  pristine file byte for byte; the minimize button collapses the card to its
-  title bar and brings back the exact same bounds; the file is named
+  pristine file byte for byte; the minimize button really minimizes the card
+  (it reports minimized, off screen) and the taskbar button brings it back with
+  the exact same bounds; the file is named
   `day-month-year_hour-minute-second-shot.png`; a second shot replaces the card
   (the old one is destroyed *before* the new grab) instead of stacking; Delete
   removes the capture, closes the card and leaves nothing on screen. It

@@ -68,10 +68,6 @@
     }
     #status.ok{color:#7ee0a5}
     #status.err{color:#ff8b8b}
-    /* Minimized: only the title bar is left, and the window itself is resized to
-       match (main keeps the old bounds and restores them). */
-    body.mini .card{height:auto}
-    body.mini .stage,body.mini .notewrap,body.mini footer{display:none}
   </style>
 </head>
 <body>
@@ -79,7 +75,7 @@
     <header id="bar">
       <span class="t">Screenshot</span>
       <span class="meta" id="meta">—</span>
-      <button class="x" id="btnMin" type="button" title="Minimize (collapse to the title bar)">&#x2212;</button>
+      <button class="x" id="btnMin" type="button" title="Minimize — the card drops to the taskbar">&#x2212;</button>
       <button class="x close" id="btnClose" type="button" title="Close (Esc)">&#x2715;</button>
     </header>
     <div class="stage"><img id="shot" alt="Screenshot preview"></div>

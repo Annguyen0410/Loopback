@@ -17,7 +17,8 @@ contextBridge.exposeInMainWorld("review", {
     note: String((payload && payload.note) || ""),
     buffer: payload && payload.buffer ? payload.buffer : undefined
   }),
-  setMini: (mini, h) => ipcRenderer.invoke("review:setmini", { mini: !!mini, h: Number(h) || 0 }),
+  // A real minimize: the card drops to the taskbar and comes back from there.
+  minimize: () => ipcRenderer.send("review:minimize"),
   reveal: () => ipcRenderer.invoke("review:reveal"),
   remove: () => ipcRenderer.invoke("review:remove"),
   close: () => ipcRenderer.send("review:close"),

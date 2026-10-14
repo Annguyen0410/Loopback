@@ -37,7 +37,6 @@ let reviewWin = null;   // the screenshot review that opens right after a shot
 let reviewName = null;  // capture being reviewed (captures/<name>)
 let reviewNote = "";    // the note typed on the review card — printed into the image
 let reviewBase = null;  // pristine bytes of that capture, so a note can be undone
-let reviewMiniBounds = null; // bounds saved while the card is collapsed to its title bar
 
 /* A destroyed BrowserWindow is NOT `null`: touching one (isMinimized(),
    focus(), close(), webContents…) throws "Object has been destroyed", which
@@ -268,7 +267,6 @@ function openShotReview(name) {
   } catch {}
   reviewName = name;
   reviewNote = "";
-  reviewMiniBounds = null;
   try { reviewBase = fs.readFileSync(src); } catch { reviewBase = null; }
   let wa = screen.getPrimaryDisplay().workArea;
   try { wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea; } catch {}
@@ -283,8 +281,10 @@ function openShotReview(name) {
       width: cw, height: ch,
       x: Math.round(wa.x + (wa.width - cw) / 2),
       y: Math.round(wa.y + (wa.height - ch) / 2),
-      frame: false, transparent: true, resizable: false, minimizable: false,
-      maximizable: false, fullscreenable: false, alwaysOnTop: true, skipTaskbar: true,
+      /* The card keeps a taskbar button on purpose: its minimize button really
+         minimizes the window, and the taskbar button is what brings it back. */
+      frame: false, transparent: true, resizable: false, minimizable: true,
+      maximizable: false, fullscreenable: false, alwaysOnTop: true, skipTaskbar: false,
       show: false, title: "Screenshot", icon: APP_ICON, backgroundColor: "#00000000",
       webPreferences: {
         preload: path.join(__dirname, "review-preload.js"),
@@ -305,7 +305,16 @@ function openShotReview(name) {
       }
     });
     reviewWin.once("ready-to-show", () => {
-      if (reviewWin && !reviewWin.isDestroyed()) { reviewWin.show(); reviewWin.focus(); }
+      if (reviewWin && !reviewWin.isDestroyed()) {
+        /* Re-assert the topmost flag right before showing: on Windows the flag
+           set at creation time can be lost while the native window is still
+           being put together, and a snipping card that stays under an editor
+           window is useless. (Measured: isAlwaysOnTop() came back false on
+           some runs until this was re-applied here.) */
+        try { reviewWin.setAlwaysOnTop(true, "floating"); } catch {}
+        reviewWin.show();
+        reviewWin.focus();
+      }
     });
     reviewWin.on("closed", () => { reviewWin = null; });
     return true;
@@ -694,25 +703,14 @@ function registerHandlers() {
     }
   });
 
-  /* Minimize the card. It lives out of the taskbar (skipTaskbar), so a real
-     minimize would be a one-way trip with no button to bring it back: the card
-     collapses to its title bar instead and the saved bounds restore it exactly
-     where it was. */
-  ipcMain.handle("review:setmini", (_, arg) => {
-    if (!reviewWin || reviewWin.isDestroyed()) return { ok: false };
-    const want = !!(arg && arg.mini);
-    try {
-      if (want && !reviewMiniBounds) {
-        const b = reviewWin.getBounds();
-        reviewMiniBounds = { x: b.x, y: b.y, width: b.width, height: b.height };
-        const h = Math.max(32, Math.round((arg && arg.h) || 48));
-        reviewWin.setBounds({ x: b.x, y: b.y, width: b.width, height: h });
-      } else if (!want && reviewMiniBounds) {
-        reviewWin.setBounds(reviewMiniBounds);
-        reviewMiniBounds = null;
-      }
-      return { ok: true, mini: !!reviewMiniBounds, bounds: reviewWin.getBounds() };
-    } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  /* Minimize the card — a real one: the window drops down to the taskbar and
+     the taskbar button (which the card keeps, skipTaskbar: false) brings it
+     back at the same size and place. Hiding it would have been silent, and
+     "disappeared" is exactly what a minimized window is supposed to look like
+     on the taskbar. */
+  ipcMain.on("review:minimize", () => {
+    if (!reviewWin || reviewWin.isDestroyed()) return;
+    try { reviewWin.minimize(); } catch (e) { console.warn("[Main] review minimize failed:", (e && e.message) || e); }
   });
 
   /* The pristine capture as bytes. The card draws its note canvas from a

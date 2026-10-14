@@ -173,23 +173,13 @@
   note.addEventListener("blur", () => { clearTimeout(noteTimer); applyNote(); });
 
   /* ---- minimize ---------------------------------------------------------
-     The card has no taskbar button, so minimizing collapses it to its title bar
-     (main resizes the window and remembers the full bounds) and pressing again
-     restores it exactly where it was. */
-  let mini = false;
-  async function toggleMini() {
-    if (!window.review || !window.review.setMini) return;
-    const want = !mini;
-    document.body.classList.toggle("mini", want);
-    const cardBox = document.querySelector(".card").getBoundingClientRect();
-    const r = await window.review.setMini(want, Math.ceil(cardBox.height));
-    if (!r || !r.ok) { document.body.classList.toggle("mini", mini); return; }
-    mini = !!r.mini;
-    document.body.classList.toggle("mini", mini);
-    btnMin.innerHTML = mini ? "&#x25A1;" : "&#x2212;";
-    btnMin.title = mini ? "Restore the picture" : "Minimize (collapse to the title bar)";
-  }
-  if (btnMin) btnMin.addEventListener("click", e => { e.stopPropagation(); toggleMini(); });
+     A real minimize: the window drops to the taskbar, exactly like the main
+     window does, and the taskbar button (or a click on it) brings the card back
+     at the same size and place. The card keeps a taskbar button for that. */
+  if (btnMin) btnMin.addEventListener("click", e => {
+    e.stopPropagation();
+    if (window.review && window.review.minimize) window.review.minimize();
+  });
 
   document.getElementById("btnDownload").addEventListener("click", e => run(e.currentTarget, async () => {
     const r = await window.review.download();
