@@ -766,6 +766,7 @@ function registerHandlers() {
   let shotImage = null; // NativeImage of the full screen
   let shotStowing = false; // overlay windows are parked off-screen for a grab
   let shotCancelled = false; // the user closed the picker while it was still opening
+  let shotOpening = null; // the picker currently being built (getSources takes 1–2 s)
 
   /* The floating bubble and the camera bubble are always-on-top overlay
      windows owned by the app, so anything of them over the selected region got
@@ -806,9 +807,67 @@ function registerHandlers() {
     shotStowing = false;
   }
 
+  /* A picker window, judged by the page it renders. `shot:done` / `shot:cancel`
+     must only ever close a window that really is one — these handlers are
+     reachable from any renderer, and closing the chat window because it sent a
+     stray message would be a disaster. */
+  function isShotPicker(w) {
+    if (!w || w.isDestroyed()) return false;
+    if (w === shotWin) return true;
+    try { return w.webContents.getURL().includes("shot-overlay.html"); } catch { return false; }
+  }
+  function closeShotPicker(w) {
+    if (!w || w.isDestroyed()) return;
+    try { w.close(); } catch {}
+  }
+  /* The window a shot answer came from. The suites drive these channels through
+     ipcMain directly, so an event without a sender is normal and must not throw. */
+  function shotSender(e) {
+    try { return e && e.sender ? BrowserWindow.fromWebContents(e.sender) : null; } catch { return null; }
+  }
+  /* Bring the picker in front of the user — focus as well, because Esc is the
+     way out and it only works on the focused window. */
+  function showShotPicker(w) {
+    if (!w || w.isDestroyed() || w.isVisible()) return;
+    try { w.show(); } catch {}
+    try { w.focus(); } catch {}
+  }
+  /* Close every picker involved in a finished or aborted shot: the window main
+     tracks and the window that actually sent the answer (the same one unless
+     something went wrong earlier). Closing only `shotWin` is what left an older
+     picker on screen forever — see openScreenshotOverlay(). */
+  function closeShotPickers(sender) {
+    closeShotPicker(shotWin);
+    if (isShotPicker(sender) && sender !== shotWin && !sender.isDestroyed()) closeShotPicker(sender);
+  }
+
   async function openScreenshotOverlay() {
     // Already picking a region: focus it instead of reporting a fake failure.
     if (shotWin && !shotWin.isDestroyed()) { shotWin.focus(); return { ok: true, already: true }; }
+    /* getSources + the page load take a second or two and the Screenshot button
+       stays clickable for all of it — an impatient second press is normal. It
+       used to race the first one into a SECOND fullscreen picker: `shotWin`
+       tracked only the newest, so the older window's Esc, its Cancel button and
+       even a finished selection all asked main to close the window it no longer
+       tracked. The orphan stayed on top of the desktop as a black screen with
+       nothing left to close it. One picker at a time — a second press joins the
+       one already being built. */
+    if (shotOpening) {
+      await shotOpening.catch(() => null);
+      if (shotWin && !shotWin.isDestroyed()) { shotWin.focus(); return { ok: true, already: true }; }
+      return { ok: false, canceled: true };
+    }
+    shotOpening = createScreenshotPicker();
+    try { return await shotOpening; } finally { shotOpening = null; }
+  }
+
+  async function createScreenshotPicker() {
+    /* A picker window that is not the one main tracks must never be left
+       standing: two fullscreen always-on-top windows are one too many, and the
+       extra one is unclosable from the UI. */
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (w !== shotWin && isShotPicker(w)) closeShotPicker(w);
+    }
     // Declared OUT here: a `let` inside the try block is not visible from catch.
     let overlayUp = false;
     shotCancelled = false;
@@ -838,6 +897,11 @@ function registerHandlers() {
         frame: false, transparent: false, resizable: false, movable: false,
         fullscreen: false, simpleFullscreen: false,
         alwaysOnTop: true, skipTaskbar: true, hasShadow: false,
+        /* Shown only once its page really holds the frozen screen (see
+           `shot:painted`): the window used to come up first, so for a second or
+           two the desktop was covered by a black page that ignored both clicks
+           and Esc — pressing Screenshot looked like hanging the machine. */
+        show: false,
         backgroundColor: "#000000",
         webPreferences: {
           preload: path.join(__dirname, "shot-preload.js"),
@@ -845,6 +909,14 @@ function registerHandlers() {
         }
       });
       overlayUp = true;
+      /* A picker whose renderer dies is a black fullscreen window with no page
+         left to close it — close the window instead. */
+      const thisPicker = shotWin;
+      thisPicker.webContents.on("render-process-gone", () => closeShotPicker(thisPicker));
+      /* A page that never reports back must not leave the user with no picker at
+         all (the bubble is parked off-screen meanwhile): show it anyway. */
+      const pickerShown = setTimeout(() => showShotPicker(thisPicker), 2500);
+      thisPicker.on("closed", () => clearTimeout(pickerShown));
       // Windows clamps a new window to the WORK area (taskbar excluded), so the
       // picker came out 48px short of the screen it had just grabbed: the bottom
       // strip could not be selected, and the overlay no longer matched the
@@ -854,6 +926,9 @@ function registerHandlers() {
       // Registered before anything async: the bubble comes back whether the
       // user crops, cancels, hits Esc or the overlay dies on its own.
       shotWin.on("closed", () => {
+        /* Only the tracked window may clear the shot state: a stray picker being
+           cleaned up must not pull the gun from under the live one. */
+        if (thisPicker !== shotWin) return;
         shotWin = null; shotImage = null;
         restoreShotOverlays();
       });
@@ -880,6 +955,9 @@ function registerHandlers() {
       // A window being closed is not reported as destroyed yet, so the explicit
       // cancel flag is what makes this reliable.
       const cancelled = overlayUp && (shotCancelled || !shotWin || shotWin.isDestroyed());
+      /* A window that never finished loading would stay on top of the desktop as
+         a black screen with no page left to close it. */
+      if (!cancelled) closeShotPicker(shotWin);
       if (!shotWin || shotWin.isDestroyed()) restoreShotOverlays();
       if (cancelled) return { ok: false, canceled: true };
       return { ok: false, error: String((e && e.message) || e) };
@@ -1095,10 +1173,11 @@ function registerHandlers() {
   }
 
   ipcMain.on("shot:done", (e, sel) => {
+    const sender = shotSender(e);
     try {
       if (!shotImage || !sel || typeof sel.x !== "number") {
         console.error("[shot] invalid selection", !!shotImage, sel);
-        if (shotWin && !shotWin.isDestroyed()) shotWin.close();
+        closeShotPickers(sender);
         shotFailed("Screenshot failed — nothing was selected", "Shot failed");
         return;
       }
@@ -1109,7 +1188,7 @@ function registerHandlers() {
       const sh = Math.min(imgSz.height - sy, Math.round(sel.h));
       if (sw < 2 || sh < 2) {
         console.error("[shot] selection too small", { sx, sy, sw, sh, imgSz });
-        if (shotWin && !shotWin.isDestroyed()) shotWin.close();
+        closeShotPickers(sender);
         shotFailed("Selection too small — drag a region", "Too small");
         return;
       }
@@ -1117,7 +1196,7 @@ function registerHandlers() {
       ensure();
       const name = `${shotStamp()}-shot.png`;
       fs.writeFileSync(path.join(CAPDIR(), name), cropped.toPNG());
-      if (shotWin && !shotWin.isDestroyed()) shotWin.close();
+      closeShotPickers(sender);
       /* The review window IS the feedback for a screenshot: preview + Download
          in the face of the user, instead of "Screenshot saved ✓" and a hunt
          through the media library. Everything else is told a capture landed so
@@ -1129,14 +1208,20 @@ function registerHandlers() {
       });
     } catch (err) {
       console.error("[shot] save failed", err);
-      if (shotWin && !shotWin.isDestroyed()) shotWin.close();
+      closeShotPickers(sender);
       shotFailed("Screenshot failed: " + ((err && err.message) || err), "Shot failed");
     }
   });
 
-  ipcMain.on("shot:cancel", () => {
+  ipcMain.on("shot:cancel", e => {
     shotCancelled = true;
-    if (shotWin && !shotWin.isDestroyed()) shotWin.close();
+    closeShotPickers(shotSender(e));
+  });
+
+  /* The frozen screen is on the picker's page: only now is it worth showing. */
+  ipcMain.on("shot:painted", e => {
+    const w = shotSender(e);
+    if (isShotPicker(w)) showShotPicker(w);
   });
 
   /* World Monitor IPC */

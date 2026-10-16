@@ -399,6 +399,38 @@ app.whenReady().then(async () => {
     check("closing the picker while it is still opening counts as a cancel, not a failure",
       !!early && !!fastRes && (fastRes.canceled === true || fastRes.ok === true), { earlyPick: !!early, fastRes });
 
+    /* Two presses while the first picker is still being built (getSources takes
+       a second, and the Screenshot button stays clickable for all of it) used to
+       race into TWO fullscreen pickers. `shotWin` tracked only the newest, so
+       the older window asked main to close a window it no longer tracked — Esc,
+       its Cancel button and even a finished selection were all dead — and it
+       stayed on top of the desktop as a black screen nothing could dismiss. */
+    const doubleCall = main.webContents.executeJavaScript(
+      "Promise.allSettled([window.api.capture.startShot(), window.api.capture.startShot()])"
+    );
+    const pickersUp = () => BrowserWindow.getAllWindows().filter(w => {
+      if (w.isDestroyed()) return false;
+      try { return w.webContents.getURL().includes("shot-overlay.html"); } catch { return false; }
+    });
+    let maxPickers = 0, racing = null;
+    for (let i = 0; i < 60; i++) {
+      await wait(100);
+      const list = pickersUp();
+      maxPickers = Math.max(maxPickers, list.length);
+      if (!racing && list[0] && !list[0].webContents.isLoading()) racing = list[0];
+      if (maxPickers > 1) break; // the bug is on screen now, no reason to wait
+    }
+    check("two presses at once leave exactly one region picker",
+      !!racing && maxPickers === 1, { maxPickers });
+    const raceRes = await doubleCall.catch(e => ({ error: String(e) }));
+    check("the second press joins the picker already opening instead of racing it",
+      Array.isArray(raceRes) && raceRes.length === 2 &&
+      raceRes.every(r => r.status === "fulfilled" && r.value && r.value.ok === true), raceRes);
+    ipcMain.emit("shot:cancel");
+    let raceGone = false;
+    for (let i = 0; i < 25 && !raceGone; i++) { await wait(150); raceGone = !findShot(); }
+    check("that one picker still closes on a cancel", raceGone === true);
+
     /* ---- 8. cleanliness: no renderer errors, no crash log, no leftovers - */
     check("no renderer window logged an error during the whole tour",
       rendererErrors.length === 0, { count: rendererErrors.length, errors: rendererErrors.slice(0, 6) });

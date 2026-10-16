@@ -50,11 +50,23 @@
   const failsafe = setTimeout(() => {
     if (!shotData) { try { window.shot.cancel(); } catch {} }
   }, 2500);
+  /* The frozen screen is only painted once the browser has the decoded bitmap,
+     and main holds the window back until then (`shot:painted`). Showing the
+     picker earlier meant a black full-screen window that swallowed clicks for a
+     second or two — indistinguishable from a hung app. */
+  function announcePainted() {
+    try { window.shot.painted(); } catch {}
+  }
+  /* Announced straight from `load`, not from requestAnimationFrame: a window
+     main has not shown yet is a hidden window, and Chromium pauses rAF there. */
+  img.addEventListener("load", announcePainted);
+
   window.shot.ready(d => {
     if (d && d.dataUrl) {
       shotData = d.dataUrl;
       clearTimeout(failsafe);
       img.src = d.dataUrl;
+      if (img.complete) announcePainted(); // already decoded (cached)
     }
   });
   img.addEventListener("error", () => { try { window.shot.cancel(); } catch {} });
