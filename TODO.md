@@ -21,7 +21,11 @@
 - [x] `npx electron audittest.js` → **RESULT PASS** (thêm 3 check mới: “two presses at once leave exactly one region picker”, “the second press joins the picker already opening instead of racing it”, “that one picker still closes on a cancel”).
 - [x] **Test mới bắt được đúng lỗi cũ**: chạy `audittest.js` (bản đã thêm check) trên **code trước khi sửa** (git worktree tạm ở `HEAD`, đã xoá) → **FAIL** `two presses at once leave exactly one region picker :: {"maxPickers":2}` và **FAIL** `that one picker still closes on a cancel` ⇒ test không phải loại “luôn pass”.
 - [x] Chạy lại các suite liên quan: `reviewtest.js` **PASS**, `piptest.js` **PASS** (có cả phần chụp thật + park bong bóng), `combotest.js` **PASS**, `captest.js` **PASS 12/12** (ảnh chụp thật vẫn lưu được qua app).
-- [ ] **Bản build/Desktop chưa cập nhật** — bạn đang chạy bản portable 1.5.1 (giải nén ở `%TEMP%`), `app.asar` của nó **trùng byte** với `main.js` cũ, nên **exe trên Desktop vẫn còn lỗi này** cho tới khi build lại.
+- [x] **Build lại exe (20:45, BUILD sạch, 0 lỗi)**: `dist\Loopback 1.5.1.exe` **103.562.342 B** (SHA-256 `9a187e24…`), `dist\Loopback Setup 1.5.1.exe` **103.784.368 B** + blockmap **107.376 B**, `latest.yml` size khớp đúng file Setup. Giữ nguyên version 1.5.1 và tên file là **có chủ ý**: entry autostart `C:\Users\nguye\OneDrive\Desktop\Loopback 1.5.1.exe` vẫn trỏ đúng một file còn tồn tại.
+- [x] **Bản đóng gói đúng là source đã test**: `app.asar` trong `dist\win-unpacked` → **84/84 file byte-identical** với working tree (0 khác, 0 lạ); `main.js` của **chính tiến trình đang chạy** (giải nén mới ở `%TEMP%`) cũng **trùng SHA-256 `ccc914a2…`** với working tree và có `shotOpening` (×5) + `shot:painted`.
+- [x] **Thay file Desktop + chạy lại**: file cũ 103.560.899 B bị xoá, bản mới chép vào → **SHA-256 trùng byte** với `dist/`; chạy `--autostart` → **6 tiến trình `Loopback.exe` đều `Responding: True`**, **không có `error.log`**.
+- [x] **Push GitHub `Annguyen0410/Loopback`** — 2 commit, 2 lần push, nhãn riêng: `cee645b` (fix + test chống tái phát), `e3dee2f` (README/TODO). Tác giả chỉ `An Nguyen <Annguyen0410@users.noreply.github.com>`, **không** có dòng attribution nào (đã grep lại).
+- Còn lại: thao tác *bằng tay* trên exe (bấm nút chụp 2 lần thật) không lái được từ ngoài — nhưng code mà tiến trình đang chạy nạp **trùng byte** với bản đã qua `audittest` / `reviewtest` / `piptest` / `combotest` / `captest`.
 
 ## v1.5.1 (14/10) — Thẻ review: nút minimize, ghi chú in thẳng vào ảnh, tên file ngày-tháng-năm_giờ-phút-giây
 
