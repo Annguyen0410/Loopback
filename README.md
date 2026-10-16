@@ -306,6 +306,18 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
   left the picker 48px short of the screen it had just grabbed (the taskbar
   strip could not be selected, and the overlay no longer matched the captured
   pixels).
+- The picker is **one at a time, and it only appears when it can be used**.
+  `desktopCapturer.getSources` plus the page load take a second or two and the
+  Screenshot button stays clickable for all of it, so a second press is normal:
+  it now joins the picker already being built instead of racing it into a
+  **second** full-screen window. `shotWin` only ever tracked the newest one, so
+  the older window's Esc, its Cancel button and even a finished selection all
+  asked main to close a window it no longer tracked — a black screen on top of
+  the desktop with nothing left to close it (`audittest` fails that race on
+  purpose). The window is also created **hidden** and shown the moment its page
+  reports the frozen screen is painted (`shot:painted`, 2.5s fallback), because
+  a window that is up before it can paint is a black screen that ignores both
+  clicks and Esc — indistinguishable from a hung app.
 - `window.prompt` / `window.confirm` are **not supported in Electron** — the
   app ships its own `dialog.js` modals instead.
 - The PiP bubble window is transparent, frameless, always-on-top, and
@@ -346,7 +358,9 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
   document (a renamed id is a dead control; this is how a welcome block that
   deleted itself on the first render was found), that the theme picker and the
   stylesheet agree, that all 16 themes stay readable in light and dark, that
-  nothing was written to `error.log`, and that no window is left behind. Set
+  nothing was written to `error.log`, and that no window is left behind. It
+  also presses Screenshot **twice while the first picker is still opening** and
+  demands exactly one full-screen window that a cancel still closes. Set
   `AUDITTEST_USERDATA=<dir>` to run it against a throwaway profile.
 - `combotest.js` (`npx electron combotest.js`) is the **combination** suite:
   every other file proves one feature works alone, this one uses them *at the

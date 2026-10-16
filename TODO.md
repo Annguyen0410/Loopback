@@ -1,5 +1,28 @@
 # Cleanup & Verification Log
 
+## Bug treo app khi bấm nút chụp màn hình (15/10)
+
+### Bối cảnh (bạn báo)
+“Nhấn vào nút chụp phát máy nó tối rồi tui không làm được gì luôn.”
+
+### Nguyên nhân thật (đo được, không đoán)
+- **Nhấn nút chụp 2 lần** — lần thứ hai rơi vào lúc lần đầu còn đang dựng picker: `desktopCapturer.getSources` trên máy này mất **1,2–2,2 s** (đo lần đầu 2.192 ms, lần sau 1.223 ms), cộng thêm load trang, và **nút chụp vẫn bấm được suốt thời gian đó** trong khi bong bóng đã bị park ra ngoài màn hình ⇒ không có phản hồi nào để chờ, bấm lại là chuyện rất tự nhiên.
+- Hàm `openScreenshotOverlay()` **có thể chạy chồng**: chốt “đang mở rồi” (`if (shotWin …)`) được kiểm **trước** mọi `await`, nên lần gọi thứ hai lọt qua và **tạo cửa sổ thứ hai**. Biến `shotWin` chỉ giữ cửa sổ **mới nhất**. Cửa sổ cũ thành **mồ côi**: `shot:done` / `shot:cancel` của nó đều nhờ main đóng `shotWin` — tức cửa sổ nó **không còn theo dõi** — nên **Esc, nút Cancel, kéo chọn… tất cả đều vô hiệu**, và nó vẫn nằm trên cùng (always-on-top `screen-saver`, full display bounds, che luôn taskbar). Kết quả: **màn hình đen phủ toàn bộ desktop, không gì đóng được** (phải Ctrl+Alt+Del / tắt app).
+- **Tái hiện**: script tạm (đã xoá) chạy app ở đúng trạng thái của bạn (chat ẩn, chỉ còn bong bóng nổi) rồi bấm nút chụp 2 lần → **2 cửa sổ picker**; Esc còn **1**, nút Cancel còn **1**, kéo chọn vẫn còn **1**; bấm chụp tiếp → **2** (chồng thêm nữa). `captures/ = 0` — không có ảnh nào được lưu.
+- Phụ thêm: cửa sổ picker được **show ngay khi tạo**, trong khi trang còn đang load ⇒ khoảng 1–2 s đầu người dùng thấy **màn hình đen, bấm chuột và Esc đều không phản ứng** (trang chưa có listener) — đúng cái cảm giác “treo”.
+
+### Đã sửa ([main.js](main.js) · [shot-overlay.js](shot-overlay.js) · [shot-preload.js](shot-preload.js))
+- **Chỉ một picker tại một thời điểm**: `shotOpening` giữ promise của lần dựng đang chạy; lần bấm thứ hai **chờ chính lần đầu** rồi trả `{ok:true, already:true}` (không tạo cửa sổ thứ hai). Mở picker mới còn **dọn trước** mọi cửa sổ picker còn sót không phải cửa sổ đang theo dõi.
+- **Mọi picker đóng được**: `shot:done` / `shot:cancel` giờ đóng **cả cửa sổ gửi tin** (`shotSender(e)` + `isShotPicker()`), không chỉ `shotWin`; lỗi thật khi mở picker thì **đóng luôn cửa sổ** đó (trước đây để lại cửa sổ đen không có trang để tự thoát); renderer của picker chết (`render-process-gone`) ⇒ đóng cửa sổ.
+- **Không còn màn hình đen bấm-không-được**: cửa sổ tạo với `show:false`, chỉ `show()+focus()` khi trang báo **đã vẽ xong ảnh chụp** (kênh mới `shot:painted`, phát từ `img.onload`) — có **fallback 2,5 s** để không bao giờ “không có picker nào”.
+
+### Kiểm chứng (đo lại sau khi sửa)
+- [x] **Repro nhấn-2-lần (script tạm, đã xoá) → PASS 8/8**: 2 lần bấm → **đúng 1 picker** (`maxPickers=1`), kết quả `{ok:true}` + `{ok:true,already:true}`; picker **hiện ở 763 ms** (không phải chờ fallback 2,5 s) và **đang focus**; kéo chọn thật → **lưu PNG 200×140, 5.764 B** + **thẻ review mở** (rộng ≥ 380); Esc/cancel → **0 picker**; bong bóng nổi **trở về đúng toạ độ cũ (932,392)**.
+- [x] `npx electron audittest.js` → **RESULT PASS** (thêm 3 check mới: “two presses at once leave exactly one region picker”, “the second press joins the picker already opening instead of racing it”, “that one picker still closes on a cancel”).
+- [x] **Test mới bắt được đúng lỗi cũ**: chạy `audittest.js` (bản đã thêm check) trên **code trước khi sửa** (git worktree tạm ở `HEAD`, đã xoá) → **FAIL** `two presses at once leave exactly one region picker :: {"maxPickers":2}` và **FAIL** `that one picker still closes on a cancel` ⇒ test không phải loại “luôn pass”.
+- [x] Chạy lại các suite liên quan: `reviewtest.js` **PASS**, `piptest.js` **PASS** (có cả phần chụp thật + park bong bóng), `combotest.js` **PASS**, `captest.js` **PASS 12/12** (ảnh chụp thật vẫn lưu được qua app).
+- [ ] **Bản build/Desktop chưa cập nhật** — bạn đang chạy bản portable 1.5.1 (giải nén ở `%TEMP%`), `app.asar` của nó **trùng byte** với `main.js` cũ, nên **exe trên Desktop vẫn còn lỗi này** cho tới khi build lại.
+
 ## v1.5.1 (14/10) — Thẻ review: nút minimize, ghi chú in thẳng vào ảnh, tên file ngày-tháng-năm_giờ-phút-giây
 
 ### Bối cảnh (bạn yêu cầu)
