@@ -1,5 +1,33 @@
 # Cleanup & Verification Log
 
+## v1.5.5 — %TEMP% phình, mất dữ liệu khi ghi dở, kéo bong bóng lần đầu (18/10)
+
+### Bối cảnh (bạn báo)
+“Mỗi lần chạy exe portable là app giải nén ~0.3–1.2GB vào %TEMP% rồi bỏ lại; 2 ngày Bop chạy ~62 lần → ~29GB. Loopback nghi mắc lỗi tương tự — sửa hết cả 2, tối ưu RAM/dung lượng, chạy mượt, không lỗi.”
+
+### Nguyên nhân thật (đo được)
+- **Mỗi build portable giải nén vào một thư mục UUID *khác nhau*** (electron-builder mặc định `unpackDirName = ksuid` sinh mới mỗi lần build) dưới `%TEMP%`. App thoát sạch thì wrapper tự xoá; tắt máy / kill / đăng xuất thì bản giải nén **ở lại vĩnh viễn**.
+- **`saveJSON`/`saveCfg` ghi thẳng lên file đang dùng** (`writeFileSync`), không nguyên tử: một lần crash / hết đĩa giữa chừng để lại JSON cụt, và `loadJSON` gặp lỗi thì trả `{messages: []}` — **mất sạch chat** mà không có gì để khôi phục.
+- **Cú kéo đầu tiên của bong bóng vừa mở bị nuốt**: `pointerdown` lấy vị trí gốc bằng IPC bất đồng bộ, mà `pointermove` nào tới trước khi IPC trả về thì bị `if (!dragState.base) return;` bỏ luôn — kéo lần đầu không thấy gì, rồi “giật” một cái khi base về.
+
+### Đã sửa ([main.js](main.js) · [package.json](package.json) · [src/main/atomic-write.js](src/main/atomic-write.js) · [src/renderer/main.js](src/renderer/main.js))
+- **Bản portable dùng một thư mục giải nén cố định** (`"portable": { "unpackDirName": "loopback-portable" }`) ⇒ trong `%TEMP%` chỉ còn **một** bản, và mỗi lần chạy `RMDir /r` xoá sạch bản cũ trước khi giải nén. Bản cũ nhiều tên khác nhau vẫn được **janitor** dọn (đã có từ trước, nay chạy thêm **định kỳ 4 giờ** vì app thường bật cùng Windows và chạy nhiều ngày; timer `unref()` nên không giữ tiến trình sống).
+- **Ghi file nguyên tử + bản sao lưu**: `src/main/atomic-write.js` ghi ra file tạm cùng thư mục → giữ bản cũ thành `.bak` → `rename` đè lên; đọc thì nếu file chính hỏng sẽ khôi phục từ `.bak` và ghi lại. `messages.json` và `settings.json` đều đi qua đường này.
+- **Kéo được ngay từ cú đầu**: delta của `pointermove` được nhớ lại kể cả khi base chưa về, và áp dụng ngay khi `dragStart()` trả về.
+- **Bớt dịch vụ nền của Chromium** (`disable-features`: MediaRouter, GlobalMediaControls, Translate, autofill, reading-mode, `CalculateNativeWinOcclusion`…) — mỗi thứ là một thread/helper hoặc một lượt tải nền mà app không dùng.
+- **Feed chỉ chạy khi có người xem**: cửa sổ Monitor bị ẩn/thu nhỏ → dừng 3 vòng poll (news 30 s, quakes 20 s, indices 30 s); hiện lại → chạy tiếp ngay. Máy ngủ (suspend) cũng dừng, tỉnh dậy mới chạy.
+
+### Kiểm chứng (đo lại sau khi sửa)
+- [x] `npm test` → **13/13 PASS** (mới: 5 test `atomic-write`, 8 test janitor — gồm ca “để lại bản cũ **cùng tên** `loopback-portable` bị kill thì phải dọn”, ca file hỏng khôi phục từ `.bak`, ca tiến trình đang chạy không bị đụng).
+- [x] `npx electron piptest.js` → **PASS 31/31** (`RESULT PASS`, exit 0). Trước khi sửa: FAIL ở check “renderer drag moves the bubble freely” đúng vì lỗi nuốt move đầu tiên.
+- [x] **EXE thật**: `Loopback 1.5.5.exe` (portable) từ Desktop → giải nén vào `%TEMP%\loopback-portable` (**đúng một** thư mục, không còn UUID), app chạy bình thường, `messages.json` (15 tin) + `settings.json` đọc nguyên vẹn.
+- [x] **Janitor chạy thật**: đặt một bản giả `%TEMP%\loopback-old-150` (back-date 2 giờ) rồi mở lại app → bản giả **bị xoá**, bản đang chạy giữ nguyên.
+- [x] Mục “Start with Windows” tự trỏ lại file mới: `electron.app.Loopback` → `"…\Desktop\Loopback 1.5.5.exe" --autostart`.
+
+### Chưa kiểm tra
+- Không có thiết bị/phiên thật để thử gửi tin sang Messenger web của Facebook (nút “Send to Messenger” chỉ **chép nội dung rồi mở** `messenger.com`; Loopback là chat với chính mình nên không biết thread nào của Facebook).
+- Không đo được RAM theo số cụ thể (chưa có phép đo trước/sau trên cùng một phiên làm việc).
+
 ## Bug treo app khi bấm nút chụp màn hình (15/10)
 
 ### Bối cảnh (bạn báo)
@@ -21,7 +49,7 @@
 - [x] `npx electron audittest.js` → **RESULT PASS** (thêm 3 check mới: “two presses at once leave exactly one region picker”, “the second press joins the picker already opening instead of racing it”, “that one picker still closes on a cancel”).
 - [x] **Test mới bắt được đúng lỗi cũ**: chạy `audittest.js` (bản đã thêm check) trên **code trước khi sửa** (git worktree tạm ở `HEAD`, đã xoá) → **FAIL** `two presses at once leave exactly one region picker :: {"maxPickers":2}` và **FAIL** `that one picker still closes on a cancel` ⇒ test không phải loại “luôn pass”.
 - [x] Chạy lại các suite liên quan: `reviewtest.js` **PASS**, `piptest.js` **PASS** (có cả phần chụp thật + park bong bóng), `combotest.js` **PASS**, `captest.js` **PASS 12/12** (ảnh chụp thật vẫn lưu được qua app).
-- [x] **Build lại exe (20:45, BUILD sạch, 0 lỗi)**: `dist\Loopback 1.5.1.exe` **103.562.342 B** (SHA-256 `9a187e24…`), `dist\Loopback Setup 1.5.1.exe` **103.784.368 B** + blockmap **107.376 B**, `latest.yml` size khớp đúng file Setup. Giữ nguyên version 1.5.1 và tên file là **có chủ ý**: entry autostart `C:\Users\nguye\OneDrive\Desktop\Loopback 1.5.1.exe` vẫn trỏ đúng một file còn tồn tại.
+- [x] **Build lại exe (20:45, BUILD sạch, 0 lỗi)**: `dist\Loopback 1.5.1.exe` **103.562.342 B** (SHA-256 `9a187e24…`), `dist\Loopback Setup 1.5.1.exe` **103.784.368 B** + blockmap **107.376 B**, `latest.yml` size khớp đúng file Setup. Giữ nguyên version 1.5.1 và tên file là **có chủ ý**: entry autostart `%USERPROFILE%\Desktop\Loopback 1.5.1.exe` vẫn trỏ đúng một file còn tồn tại.
 - [x] **Bản đóng gói đúng là source đã test**: `app.asar` trong `dist\win-unpacked` → **84/84 file byte-identical** với working tree (0 khác, 0 lạ); `main.js` của **chính tiến trình đang chạy** (giải nén mới ở `%TEMP%`) cũng **trùng SHA-256 `ccc914a2…`** với working tree và có `shotOpening` (×5) + `shot:painted`.
 - [x] **Thay file Desktop + chạy lại**: file cũ 103.560.899 B bị xoá, bản mới chép vào → **SHA-256 trùng byte** với `dist/`; chạy `--autostart` → **6 tiến trình `Loopback.exe` đều `Responding: True`**, **không có `error.log`**.
 - [x] **Push GitHub `Annguyen0410/Loopback`** — 2 commit, 2 lần push, nhãn riêng: `cee645b` (fix + test chống tái phát), `e3dee2f` (README/TODO). Tác giả chỉ `An Nguyen <Annguyen0410@users.noreply.github.com>`, **không** có dòng attribution nào (đã grep lại).
@@ -46,7 +74,7 @@
 - [x] `npx electron captest.js` → **PASS 12/12**: `local-file://` vẫn 200/206/404 đúng, media library vẫn render thumbnail + preview ảnh, video vẫn phát (`readyState 1`), **0 lỗi console** — thay đổi URL (`?v=mtime`) và kênh `capture:updated` không làm hỏng gì.
 - [x] **Bản build khớp source**: giải nén `app.asar` của bản mới → **84/84 file SHA-256 trùng từng byte** với working tree, **0 file khác, 0 file thiếu** (chỉ `package.json` electron-builder rewrite — version 1.5.1).
 - [x] **Đưa bản mới ra desktop**: xoá file cũ trên Desktop rồi chép bản mới — SHA-256 **trùng byte** với `dist/`; chạy thật → sau **~24 s** app lên đủ **8 tiến trình `Responding: True`**, **không có `error.log`**.
-- [x] **Entry autostart đo lại theo từng giây** (chạy **đúng một lần**, đã xoá sạch temp của các lần trước): `t+8s` (mới có wrapper) → `t+24s…t+48s` (đủ 8 tiến trình) entry **luôn** là `"C:\Users\nguye\OneDrive\Desktop\Loopback 1.5.1.exe" --autostart` — **không lần nào trỏ vào `%TEMP%`**. Lần đọc ra đường dẫn `%TEMP%` giữa chừng là do lệnh `cp + start` cũ bị timeout để lại **một lần chạy thứ hai** chồng lên (hai thư mục `3Kh…` trong temp chứng minh điều đó), không phải lỗi đăng ký login item.
+- [x] **Entry autostart đo lại theo từng giây** (chạy **đúng một lần**, đã xoá sạch temp của các lần trước): `t+8s` (mới có wrapper) → `t+24s…t+48s` (đủ 8 tiến trình) entry **luôn** là `"%USERPROFILE%\Desktop\Loopback 1.5.1.exe" --autostart` — **không lần nào trỏ vào `%TEMP%`**. Lần đọc ra đường dẫn `%TEMP%` giữa chừng là do lệnh `cp + start` cũ bị timeout để lại **một lần chạy thứ hai** chồng lên (hai thư mục `3Kh…` trong temp chứng minh điều đó), không phải lỗi đăng ký login item.
 
 ### Còn lại / giới hạn thật
 - Thao tác tay trên bản **exe đã đóng gói** (bấm nút minimize, gõ chú thích) không lái được từ ngoài — nhưng `app.asar` của bản đóng gói **trùng byte** với source đã chạy 29 check ở trên, nên phần được kiểm là đúng đoạn code trong exe.
@@ -71,7 +99,7 @@
 ### Đưa 1.5.1 ra desktop + gỡ bản cài 1.4.0 (đều chạy thật)
 
 **Bạn yêu cầu:** “file trên desktop là bản 1.4.0 mà, tạo cái 1.5.1 rồi lôi ra màn hình desktop, xong xóa bản cũ đi.”
-- **Xác định đúng “bản cũ”**: shortcut `Loopback.lnk` trên `C:\Users\nguye\OneDrive\Desktop` chỉ là con trỏ tới **bản cài 1.4.0** ở `%LOCALAPPDATA%\Programs\Loopback` (asar trong đó ghi `version: 1.4.0`, **không có** `review.*`) + shortcut Start Menu + entry Add/Remove — cả ba đều là 1.4.0.
+- **Xác định đúng “bản cũ”**: shortcut `Loopback.lnk` trên `%USERPROFILE%\Desktop` chỉ là con trỏ tới **bản cài 1.4.0** ở `%LOCALAPPDATA%\Programs\Loopback` (asar trong đó ghi `version: 1.4.0`, **không có** `review.*`) + shortcut Start Menu + entry Add/Remove — cả ba đều là 1.4.0.
 - **Copy bản mới ra desktop**: `dist\Loopback 1.5.1.exe` → `…\OneDrive\Desktop\Loopback 1.5.1.exe`, **SHA-256 trùng byte** (`c1ec24322cd1952b7d1c5ee2e7c58f0e3caf6398b388fe6a611e3d850dcbe912`).
 - **Gỡ 1.4.0 bằng chính uninstaller của nó** (`"…\Uninstall Loopback.exe" /currentuser /S`) → **exit 0**; thư mục cài biến mất sau ~10 s; **không còn** shortcut Desktop/Start Menu lẫn entry registry. Không đụng tới `%APPDATA%\messenger-self-chat` (note/cài đặt của bạn giữ nguyên).
 
@@ -86,7 +114,7 @@
 - **Tray + “đóng cửa sổ vẫn chạy ngầm” vẫn tốt trên đúng file desktop**: WM_CLOSE cả 2 cửa sổ (chat + bong bóng 42×186) → **6 tiến trình còn sống**, không `error.log`. (Nếu tray chết thì `window-all-closed` đã thoát app — còn sống ⇒ tray có thật.)
 - **Sửa**: đặt `startAtLogin: true` trong `settings.json` (y hệt thao tác toggle *Start with Windows*).
 - [x] **Giả lập đúng lúc mở máy**: `"…\OneDrive\Desktop\Loopback 1.5.1.exe" --autostart` → lên sau **~34 s**, **7 tiến trình**, **đúng 1 cửa sổ hiện = bong bóng 42×186** (cỡ Small), **0 cửa sổ chat**, không `error.log` — đúng hành vi “mở máy là chạy sẵn, không cửa sổ nào phải tắt”.
-- [x] **Entry do app tự ghi**: `electron.app.Loopback = "C:\Users\nguye\OneDrive\Desktop\Loopback 1.5.1.exe" --autostart` (trỏ đúng file trên desktop, không phải bản trong `%TEMP%`); **còn nguyên sau khi tắt app**.
+- [x] **Entry do app tự ghi**: `electron.app.Loopback = "%USERPROFILE%\Desktop\Loopback 1.5.1.exe" --autostart` (trỏ đúng file trên desktop, không phải bản trong `%TEMP%`); **còn nguyên sau khi tắt app**.
 - [x] **Dọn sạch**: temp 2 lần chạy đã xoá, 0 tiến trình còn lại, C: **44 GB trống**.
 - **Ghi chú**: lần mở máy thật chỉ Windows chạy được — mô phỏng đã dùng đúng entry + đúng cờ. Trong ảnh bạn gửi lúc 17:28 **không có icon Loopback** (đúng: lúc đó nó không chạy); icon Loopback là ô xanh dương + bong bóng chat có tia sét, nằm trong mục icon ẩn (⌄) của khay — muốn thấy thường xuyên thì ghim nó ra ngoài.
 
@@ -183,7 +211,7 @@
 - [x] **Đổi `appId` nên KHÔNG cài đè tại chỗ được như các bản trước** (electron-builder coi appId khác là app khác → sẽ cài song song). Nên: tắt app (6 tiến trình) → chạy `Uninstall Messenger Self-Chat.exe /S` → **exit 0**, thư mục `%LOCALAPPDATA%\Programs\Messenger Self-Chat` biến mất sau **1s**.
 - [x] Hash SHA-256 của `messages.json` / `settings.json` / `pip.json` / `data.json` **y hệt** sau khi gỡ (`files/`, `voice/`, `captures/` vẫn còn) → uninstall không đụng dữ liệu.
 - [x] Cài `Loopback Setup 1.3.9.exe /S` → **exit code 0**. `%LOCALAPPDATA%\Programs\Loopback\Loopback.exe` → **ProductVersion 1.3.9.0**, ProductName `Loopback`; asar đã cài khớp đúng bản build.
-- [x] Shortcut: Start Menu `Loopback.lnk`, Desktop (`C:\Users\nguye\OneDrive\Desktop`) `Loopback.lnk`; Add/Remove Programs chỉ còn **`Loopback 1.3.9`** — không còn dấu vết “Messenger Self-Chat”.
+- [x] Shortcut: Start Menu `Loopback.lnk`, Desktop (`%USERPROFILE%\Desktop`) `Loopback.lnk`; Add/Remove Programs chỉ còn **`Loopback 1.3.9`** — không còn dấu vết “Messenger Self-Chat”.
 - [x] **Mở app thật:** 7 tiến trình `Loopback.exe`, cửa sổ tiêu đề **`Loopback`**, `Responding: True`, **không có `error.log`**; hash 4 file dữ liệu + `files/` + `voice/` + `captures/` vẫn y hệt baseline.
 - [x] **Dọn `dist/`:** xoá 1.3.8 (installer, portable, blockmap) + `win-unpacked` → chỉ còn bản 1.3.9 (**198M**).
 

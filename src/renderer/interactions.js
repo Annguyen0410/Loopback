@@ -78,6 +78,7 @@ export function showCtxMenu(e, msgId) {
   showItem(menu, "reply", hasText);
   showItem(menu, "copy", hasText);
   showItem(menu, "copyMd", hasText);
+  showItem(menu, "messenger", hasText);
   showItem(menu, "save", hasFiles);
   showItem(menu, "edit", hasText);
   // These always apply (also to a deleted tombstone).
@@ -172,6 +173,14 @@ export function initContextMenu() {
     closeCtxMenu();
     if (action === "react") { showReactionPicker(e, ui.ctxTarget); return; }
     if (action === "copy") { try { navigator.clipboard.writeText(plainText(msg.text)); } catch {} toast("Copied plain text"); return; }
+    if (action === "messenger") {
+      // Facebook has no public way to post into a chat from outside, so the text goes to the clipboard and
+      // Messenger opens for the user to paste and send. Nothing is typed or sent on their behalf.
+      try { navigator.clipboard.writeText(plainText(msg.text)); } catch {}
+      if (window.api && window.api.openMessenger) window.api.openMessenger();
+      toast("Copied — paste it into Messenger");
+      return;
+    }
     if (action === "copyMd") { try { navigator.clipboard.writeText(msg.text || ""); } catch {} toast("Copied markdown"); return; }
     if (action === "pin") { msg.pinned = !msg.pinned; render(false); await save(); toast(msg.pinned ? "Pinned" : "Unpinned"); return; }
     if (action === "edit") { openEdit(msg); return; }

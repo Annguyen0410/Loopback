@@ -3,7 +3,7 @@
  * with DOMParser. No API key needed.
  */
 
-import { $, esc } from "./utils.js";
+import { $, esc, escAttr, safeHref } from "./utils.js";
 import { fetchText } from "./net.js";
 import { setGDACS } from "./map-layers.js";
 import { logWorldEvent } from "./events.js";
@@ -85,16 +85,27 @@ export function renderGDACS(items) {
         cat: it.kind ? it.kind.toUpperCase() : "DISASTER",
         sev,
         title: it.title,
-        time: it.pubDate ? (Date.parse(it.pubDate) || Date.now()) : Date.now(),
-        key: "gd" + (it.eventId || it.title)
+        // GDACS publishes a date; when it is missing the record is marked
+        // time-unknown rather than stamped with the poll time.
+        time: it.pubDate ? (Date.parse(it.pubDate) || null) : null,
+        key: "gd" + (it.eventId || it.title),
+        source: "GDACS",
+        sourceUrl: "https://www.gdacs.org/",
+        url: it.link || "https://www.gdacs.org/",
+        lat: it.lat,
+        lng: it.lng,
+        country: it.country,
+        summary: [it.severity, it.severityText, it.population ? it.population + " people in the alert area" : ""]
+          .filter(Boolean).join(" · "),
+        quality: "official"
       });
     }
     const meta = it.country
       ? esc(it.country) + " · " + (it.pubDate || "").slice(0, 16)
       : esc((it.pubDate || "").slice(0, 16));
-    const href = it.link || "https://www.gdacs.org/";
+    const href = safeHref(it.link || "https://www.gdacs.org/");
     html += '<div class="gdacs-row">' +
-      '<span class="gdacs-level ' + cls + '" title="' + esc(it.severity || "unknown") + " — " + esc(it.kind || "") + '">' + esc(it.icon || "⚠") + "</span>" +
+      '<span class="gdacs-level ' + cls + '" title="' + escAttr((it.severity || "unknown") + " — " + (it.kind || "")) + '">' + esc(it.icon || "⚠") + "</span>" +
       '<span class="gdacs-title"><a href="' + href + '" target="_blank" rel="noopener">' + esc(it.title) + "</a></span>" +
       '<span class="gdacs-meta">' + meta + "</span></div>";
   }

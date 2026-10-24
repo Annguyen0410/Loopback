@@ -8,9 +8,16 @@ import { renderFinanceTab } from "./finance.js";
 import { renderInfraTab } from "./infrastructure.js";
 import { renderScenarioTab } from "./scenarios.js";
 import { renderRouteTab } from "./route-explorer.js";
+import { renderEventsTab } from "./event-view.js";
+import { renderWatchTab } from "./watchlist.js";
 
-const TABS = { intel: "sbIntel", risk: "sbRisk", route: "sbRoute", scenario: "sbScenario", finance: "sbFinance", infra: "sbInfra" };
+const TABS = {
+  intel: "sbIntel", risk: "sbRisk", events: "sbEvents", watch: "sbWatch",
+  route: "sbRoute", scenario: "sbScenario", finance: "sbFinance", infra: "sbInfra"
+};
 let current = "intel";
+// EVENTS/WATCH intentionally stay out of this map: their content changes as
+// events arrive, so they re-render every time the tab is opened.
 let rendered = { intel: false, risk: false, route: false, scenario: false, finance: false, infra: false };
 const renderers = {}; // tab → fn
 
@@ -18,6 +25,8 @@ export function registerTab(tabId, renderFn) { renderers[tabId] = renderFn; }
 
 export function initSidebar() {
   registerTab("risk", renderRiskTab);
+  registerTab("events", renderEventsTab);
+  registerTab("watch", renderWatchTab);
   registerTab("route", renderRouteTab);
   registerTab("scenario", renderScenarioTab);
   registerTab("finance", renderFinanceTab);

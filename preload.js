@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("api", {
   deleteFiles: names => ipcRenderer.invoke("file:delete", names),
   exportData: () => ipcRenderer.invoke("store:export"),
   openDataFolder: () => ipcRenderer.invoke("app:openDataFolder"),
+  openMessenger: () => ipcRenderer.invoke("app:openMessenger"),
   resizeImage: d => ipcRenderer.invoke("image:resize", d),
   // Drag & drop: electron no longer exposes File.path; use webUtils
   storeDroppedFiles: files => {
@@ -113,13 +114,6 @@ contextBridge.exposeInMainWorld("api", {
   }
 });
 
-// monitorApi is only used by monitor.html (its own preload exposes it too),
-// exposing here is harmless and keeps both bridges symmetrical.
-contextBridge.exposeInMainWorld("monitorApi", {
-  fetchQuakes: () => ipcRenderer.invoke("monitor:quakes"),
-  fetchIndices: () => ipcRenderer.invoke("monitor:indices"),
-  fetch2YYield: () => ipcRenderer.invoke("monitor:2y-yield"),
-  sys: () => ipcRenderer.invoke("monitor:sys"),
-  onLive: cb => ipcRenderer.on("monitor:live", (e, d) => cb(d)),
-  close: () => ipcRenderer.send("monitor:close")
-});
+/* No monitorApi here on purpose. The chat window has no use for the monitor's bridge (system metrics, the
+   proxy, feed fetches); those channels are restricted to monitor.html by src/main/ipc-policy.js and the
+   preload should not offer what main will refuse. */

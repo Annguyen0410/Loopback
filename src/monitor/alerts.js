@@ -7,7 +7,7 @@
  * log and (optionally) plays a sound.
  */
 
-import { $, pad } from "./utils.js";
+import { $, pad, esc } from "./utils.js";
 import { logWorldEvent } from "./events.js";
 
 let RULES = [];
@@ -15,7 +15,7 @@ let fired = new Map();   // ruleId -> timestamp of last fire (for cooldown)
 const COOLDOWN = 5 * 60 * 1000;
 
 let audioCtx = null;
-function beep(severity) {
+export function playAlertTone(severity) {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = audioCtx.createOscillator();
@@ -45,7 +45,9 @@ export function logThreat(lvl, msg) {
   const ts = pad(now.getUTCHours()) + ":" + pad(now.getUTCMinutes()) + ":" + pad(now.getUTCSeconds());
   const line = document.createElement("div");
   line.className = "threat-line";
-  line.innerHTML = '<span class="t-time">[' + ts + ']</span> <span class="t-' + lvl + '">[' + lvl.toUpperCase() + ']</span> ' + msg;
+  /* `msg` is built from live feed values (an earthquake place, a headline). It is text, never markup. */
+  const level = lvl === "crit" || lvl === "warn" ? lvl : "info";
+  line.innerHTML = '<span class="t-time">[' + ts + ']</span> <span class="t-' + level + '">[' + esc(level.toUpperCase()) + ']</span> ' + esc(msg);
   body.appendChild(line);
   while (body.children.length > 80) body.removeChild(body.firstChild);
   body.scrollTop = body.scrollHeight;
@@ -63,7 +65,7 @@ export function evaluateAlerts() {
       fired.set(r.id, Date.now());
       logThreat(out.severity || r.severity || "warn", out.msg || r.label);
       logWorldEvent({ cat: "ALERT", sev: out.severity || r.severity || "warn", title: out.msg || r.label, key: r.id + "|" + (out.msg || r.label) });
-      if (out.sound !== false) beep(out.severity || r.severity);
+      if (out.sound !== false) playAlertTone(out.severity || r.severity);
     } catch { /* rule exploded — ignore */ }
   }
 }

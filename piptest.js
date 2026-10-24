@@ -103,7 +103,11 @@ app.whenReady().then(async () => {
     await wait(800);
     const collapsed = await pip.webContents.executeJavaScript("document.body.classList.contains('pip-collapsed')");
     const cb0 = pip.getBounds();
-    check("collapse keeps the tiny bubble window", collapsed === true && cb0.width < 500, { collapsed, bounds: cb0 });
+    /* The marker is the STATE plus the collapsed geometry, not "width < 500": since the popup opens at ~50% of
+       the screen, a fixed width threshold says nothing about which of the two states the window is in. */
+    check("collapse keeps the tiny bubble window",
+      collapsed === true && cb0.width > 20 && cb0.width <= 60 && cb0.height > 100 && cb0.height < 300,
+      { collapsed, bounds: cb0 });
     const pipScale = 1; // keep the drag math deterministic
     fs.writeFileSync(settingsFile(), JSON.stringify({ pipScale }), "utf8");
     ipcMain.emit("pip:resize");
@@ -294,7 +298,7 @@ app.whenReady().then(async () => {
     const afterDrag = pip.getBounds();
     const dragCollapsed = await pip.webContents.executeJavaScript("document.body.classList.contains('pip-collapsed')");
     check("drag moves the bubble and stays collapsed",
-      afterDrag.width < 500 && dragCollapsed === true && afterDrag.x > 60,
+      afterDrag.width <= 60 && afterDrag.height < 300 && dragCollapsed === true && afterDrag.x > 60,
       { afterDrag, dragCollapsed });
     const [ddx, ddy] = pip.getPosition();
     check("drag lands where the pointer ended (60,80 → +120,+120)", ddx === 180 && ddy === 200, { ddx, ddy });

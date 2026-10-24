@@ -5,6 +5,7 @@
 import { $ } from "./utils.js";
 import { fetchJSON } from "./net.js";
 import { setStorms } from "./map-layers.js";
+import { logWorldEvent } from "./events.js";
 
 const CITIES = [
   { name: "New York", lat: 40.7, lng: -74.0 },
@@ -54,7 +55,25 @@ function recordStorms(data) {
     if (!w) continue;
     const c = w.weathercode;
     if (c === 95 || c === 96 || c === 99 || c === 61 || c === 63) {
-      storms.push({ lat: CITIES[i].lat, lng: CITIES[i].lng, place: CITIES[i].name, event: c >= 95 ? "Thunderstorm" : "Rain" });
+      const severe = c >= 95;
+      storms.push({ lat: CITIES[i].lat, lng: CITIES[i].lng, place: CITIES[i].name, event: severe ? "Thunderstorm" : "Rain" });
+      // Only thunderstorms enter the all-category timeline; ordinary rain is
+      // common enough that it would drown the operational events.
+      if (severe) {
+        logWorldEvent({
+          cat: "WEATHER",
+          sev: "warn",
+          title: "Thunderstorm — " + CITIES[i].name,
+          time: Date.parse(w.time || "") || null,
+          key: "weather|" + CITIES[i].name + "|" + c + "|" + (w.time || ""),
+          source: "Open-Meteo",
+          sourceUrl: "https://open-meteo.com/",
+          lat: CITIES[i].lat,
+          lng: CITIES[i].lng,
+          summary: "Current weather code " + c + " (thunderstorm)",
+          quality: "official"
+        });
+      }
     }
   }
   setStorms(storms);

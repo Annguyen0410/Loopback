@@ -10,8 +10,10 @@
  *   6. live feeds (each polls on its own schedule)
  */
 
+// Must stay first: it wraps window.setInterval before any module below registers a timer.
+import "./poll-gate.js";
 import { $, pad } from "./utils.js";
-import { FEEDS, renderFeedStatus } from "./net.js";
+import { FEEDS, renderFeedStatus, noteFeedStatus } from "./net.js";
 import { onLive, api, closeMonitor } from "./bridge.js";
 import { initWidgets } from "./widgets.js";
 import { initWidgets as initUiWidgets } from "./widgets-ui.js";
@@ -26,15 +28,17 @@ import { initDayNight } from "./daynight.js";
 import { initMapLayers } from "./map-layers.js";
 import { initMarkets, applyLiveMarkets } from "./markets.js";
 import { initMap, map } from "./map-engine.js";
-import { initSidebar } from "./sidebar-tabs.js";
+import { initSidebar, activate } from "./sidebar-tabs.js";
 import { initNews, applyLiveNews } from "./news.js";
-import { fetchQuakes, initQuakeLayer, renderMoonPhase, scrubQuakes, quakeData, applyLiveQuakes } from "./quakes.js";
+import { initQuakeLayer, renderMoonPhase, scrubQuakes, quakeData, applyLiveQuakes, renderQuakeEmptyState } from "./quakes.js";
 import { nearestCountry, showRiskDetail, renderTopInstability } from "./country-risk.js";
 import { renderChokepointsPanel } from "./chokepoints.js";
 import { initRealtime } from "./realtime.js";
 import { initEarthCam } from "./earthcam.js";
 import { initPalette } from "./palette.js";
-import { addRule, startAlertEngine, evaluateAlerts } from "./alerts.js";
+import { initLaunches } from "./launches.js";
+import { initEventView } from "./event-view.js";
+import { initWatchlist } from "./watchlist.js";
 import { fetchWeather } from "./weather.js";
 import { fetchGDACS, renderGDACS } from "./disasters.js";
 import { fetchGDELT, renderGDELT, fetchIODA, renderIODA } from "./geopolitics.js";
@@ -78,9 +82,12 @@ initDayNight();
 initLayers();
 initMapLayers();
 initNews();
+initLaunches();
 initMarkets();
 initRealtime();
 initEarthCam();
+initEventView({ activate });
+initWatchlist();
 initPalette();
 renderChokepointsPanel();
 renderTopInstability();
@@ -109,8 +116,10 @@ initSidebar();
 /* ---------- live feeds ---------- */
 if (map) initQuakeLayer();
 
-/* ---------- poll loops ---------- */
-fetchQuakes().finally(stampUpdate);  setInterval(() => fetchQuakes().finally(stampUpdate), 60 * 1000);
+/* ---------- poll loops (the page's own feeds only) ----------
+ * News, quakes and indices are NOT polled here: the main process owns them and pushes them over
+ * `monitor:live` (see src/main/monitor-scheduler.js). Fetching them here as well was the duplication this
+ * change removes — one owner per feed, and the cadence tied to how often the source really changes. */
 fetchWeather();                      setInterval(fetchWeather, 3 * 60 * 1000);
 /* The fetchers return null when the feed is unreachable — render that state
    instead of silently folding it into "no alerts" (catch + .then(null)). */
@@ -118,7 +127,7 @@ fetchGDACS().then(renderGDACS);      setInterval(() => fetchGDACS().then(renderG
 fetchGDELT().then(renderGDELT);      setInterval(() => fetchGDELT().then(renderGDELT), 5 * 60 * 1000);
 fetchIODA().then(renderIODA);        setInterval(() => fetchIODA().then(renderIODA), 10 * 60 * 1000);
 fetchAirQuality();                   setInterval(fetchAirQuality, 5 * 60 * 1000);
-fetchSpaceWeather();                 setInterval(fetchSpaceWeather, 5 * 60 * 1000);
+fetchSpaceWeather();                 setInterval(fetchSpaceWeather, 10 * 60 * 1000);
 renderMoonPhase();                   setInterval(renderMoonPhase, 60 * 60 * 1000);
 
 /* ---------- live push from main (monitor:live) ---------- */
@@ -128,13 +137,13 @@ onLive(msg => {
     if (msg.type === "news") applyLiveNews(msg.data);
     else if (msg.type === "quakes") { applyLiveQuakes(msg.data); stampUpdate(); }
     else if (msg.type === "indices") { applyLiveIndices(msg.data); applyLiveMarkets(msg.data); }
-    else if (msg.type === "refresh") {
-      const f = msg.data && msg.data.feed;
-      if (f === "gdacs") fetchGDACS().then(renderGDACS).finally(stampUpdate);
-      else if (f === "gdelt") fetchGDELT().then(renderGDELT).finally(stampUpdate);
-      else if (f === "weather") fetchWeather().finally(stampUpdate);
-      else if (f === "space") fetchSpaceWeather().finally(stampUpdate);
-      else if (f === "airq") fetchAirQuality().finally(stampUpdate);
+    /* The owner's honest state: LIVE / STALE / OFFLINE with the last update time. A failed feed appears as a
+       failed feed in FEED STATUS, never as "nothing happened". */
+    else if (msg.type === "feed-status") {
+      noteFeedStatus(msg.data);
+      // The owner says the quake feed is down and nothing was ever loaded: say so, instead of an empty globe.
+      const u = msg.data || {};
+      if (u.feed === "quakes" && u.status !== "LIVE" && !quakeData) renderQuakeEmptyState();
     }
   } catch (e) { console.warn("[Monitor] live push", e); }
 });
@@ -144,25 +153,10 @@ onLive(msg => {
 refreshFinancePolling();
 refreshInfraPolling();
 
-/* ---------- alert rules ---------- */
-addRule({
-  id: "bigquake",
-  label: "M≥6 earthquake",
-  severity: "crit",
-  test: () => {
-    const d = window.__lastQuakeData; // injected by quakes.js below
-    if (!d) return null;
-    const big = d.features.find(f => f.properties.mag >= 6 && Date.now() - f.properties.time < 60 * 60 * 1000);
-    if (big) return { fire: true, msg: "M" + big.properties.mag.toFixed(1) + " — " + big.properties.place };
-  }
-});
-startAlertEngine();
-/* The old ambient "port scan / DNS tunnelling" log was generated from random
-   IPs — fabricated security telemetry. The threat log is now fed only by the
-   real alert rules and live feed events above. */
-
-/* expose last quake data for alert rule */
-Object.defineProperty(window, "__lastQuakeData", { get: () => quakeData });
+/* ---------- watch rules ----------
+ * The single hard-coded big-quake rule moved into the user-owned WATCH tab.
+ * initWatchlist() subscribes to new normalized events, so there is one alert
+ * path and no duplicate threshold check on a separate one-minute timer. */
 
 /* ---------- initial UI noise ---------- */
 renderFeedStatus();

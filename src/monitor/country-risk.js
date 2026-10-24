@@ -3,7 +3,12 @@
  * Rebuilt from the original monitor.js data.
  */
 
-import { $, esc } from "./utils.js";
+import { $, esc, safeHref } from "./utils.js";
+import { eventMatchesCountry, formatAge } from "./event-model.mjs";
+import { getEvents } from "./event-store.js";
+import { getHeadlines } from "./news.js";
+import { FEEDS } from "./net.js";
+import { focusCountryEvents } from "./event-view.js";
 
 export const COUNTRIES = [
   { iso: "US", name: "United States", flag: "🇺🇸", lat: 39, lng: -98, ii: 22, ri: 82, domains: [78,85,72,91,88,80] },
@@ -169,6 +174,130 @@ function updateSortHeaders() {
   });
 }
 
+function briefFeedRows() {
+  const names = ["news", "quakes", "gdacs", "gdelt", "ioda"];
+  const rows = names.map(name => FEEDS[name]).filter(Boolean);
+  if (!rows.length) return '<div class="evd-muted">No feed has reported yet.</div>';
+  return rows.map(feed => {
+    const state = feed.status === "LIVE" ? "live" : feed.status === "STALE" ? "stale" : "off";
+    return '<span class="brief-feed"><span class="fs-dot ' + state + '"></span>' + esc(feed.name) +
+      " · " + esc(String(feed.status || "OFFLINE").toLowerCase()) +
+      " · " + esc(feed.lastOk ? formatAge(feed.lastOk) : "never ok") + "</span>";
+  }).join("");
+}
+
+/*
+ * A country name is a safe text match; a bare two-letter ISO code is not. The
+ * old code matched `\bUS\b` case-insensitively, so every headline containing
+ * the pronoun "us" was shown as United States intelligence. Only unambiguous
+ * aliases (three letters or more, or the uppercase US/U.S. forms) are used.
+ */
+const COUNTRY_MENTION_ALIASES = {
+  US: ["united states", "united states of america", "u.s.", "usa"],
+  GB: ["united kingdom", "great britain", "britain", "u.k."],
+  AE: ["united arab emirates", "uae"],
+  KR: ["south korea", "republic of korea"],
+  KP: ["north korea", "dprk"],
+  RU: ["russia", "russian federation"],
+  VN: ["vietnam", "viet nam"]
+};
+
+function countryHeadlineMentions(country) {
+  const names = [country.name, ...(COUNTRY_MENTION_ALIASES[country.iso] || [])]
+    .map(value => String(value || "").toLowerCase());
+  return getHeadlines().filter(item => {
+    const title = String(item.title || "");
+    const text = title.toLowerCase();
+    if (names.some(name => name && text.includes(name))) return true;
+    // Uppercase US/U.S. is a country reference; lowercase "us" is not.
+    return country.iso === "US" && (/\bUS\b/.test(title) || /U\.S\./.test(title));
+  }).slice(0, 5);
+}
+
+function briefText(country, events, mentions) {
+  const lines = [
+    "LOOPBACK WORLD MONITOR — COUNTRY BRIEF",
+    country.flag + " " + country.name,
+    "",
+    "Reference profile (STATIC, edited 2026-10)",
+    "Instability index: " + country.ii + "/100",
+    "Resilience index: " + country.ri + "/100",
+    "",
+    "Recent events (72h, " + events.length + "):"
+  ];
+  for (const event of events) {
+    lines.push("- " + (event.eventTime ? new Date(event.eventTime).toISOString().slice(0, 16).replace("T", " ") : "time not reported") +
+      " · " + event.source + " · " + event.title);
+  }
+  if (!events.length) lines.push("- No matching live events cached.");
+  lines.push("", "Headline mentions (text match, not location):");
+  for (const item of mentions) lines.push("- " + item.source + " · " + item.title);
+  if (!mentions.length) lines.push("- None cached in the current news window.");
+  lines.push("", "Scores are curated reference values, not live measurements.");
+  lines.push("Sources: USGS, GDACS, GDELT, IODA and the news feeds shown in FEED STATUS.");
+  return lines.join("\n");
+}
+
+function renderBrief(country) {
+  const box = $("riskModalBrief");
+  if (!box) return;
+  const events = getEvents({ from: Date.now() - 72 * 60 * 60 * 1000, limit: 600 })
+    .filter(event => eventMatchesCountry(event, country))
+    .slice(0, 8);
+  const mentions = countryHeadlineMentions(country);
+  let html = '<div class="brief-head"><span>COUNTRY BRIEF</span><span class="choke-ref">STATIC PROFILE + LIVE EVIDENCE</span></div>';
+  html += '<div class="brief-note">The scores above are a curated reference assessment (edited 2026-10), not a real-time measurement. Events below are live records whose country field matches ' + esc(country.name) + '.</div>';
+  html += '<div class="brief-section"><div class="brief-label">RECENT EVENTS · 72H <span>' + events.length + '</span></div>';
+  if (events.length) {
+    html += '<div class="brief-events">';
+    for (const event of events) {
+      const time = event.eventTime ? new Date(event.eventTime).toISOString().slice(5, 16).replace("T", " ") : "time unknown";
+      const title = event.url
+        ? '<a href="' + safeHref(event.url) + '" target="_blank" rel="noopener">' + esc(event.title) + "</a>"
+        : esc(event.title);
+      html += '<div class="brief-event"><span class="brief-event-time">' + esc(time) + "</span>" +
+        '<span class="brief-event-title">' + title + '</span><span class="brief-event-src">' + esc(event.source) + "</span></div>";
+    }
+    html += "</div>";
+  } else {
+    html += '<div class="panel-empty">No matching live event is cached in the last 72h.</div>';
+  }
+  html += "</div>";
+  html += '<div class="brief-section"><div class="brief-label">HEADLINES THAT MENTION ' + esc(country.name.toUpperCase()) + '</div>';
+  if (mentions.length) {
+    html += '<div class="brief-mentions">';
+    for (const item of mentions) {
+      html += '<div class="brief-mention">' + (item.url ? '<a href="' + safeHref(item.url) + '" target="_blank" rel="noopener">' + esc(item.title) + "</a>" : esc(item.title)) +
+        '<span>' + esc(item.source || "") + "</span></div>";
+    }
+    html += "</div>";
+  } else {
+    html += '<div class="panel-empty">No cached headline mentions this country.</div>';
+  }
+  html += '<div class="brief-caveat">Text match only — a headline that names a country is not proof that the event happened there.</div></div>';
+  html += '<div class="brief-section"><div class="brief-label">DATA COVERAGE</div><div class="brief-feeds">' + briefFeedRows() + "</div></div>";
+  html += '<div class="brief-actions"><button class="route-btn" id="riskEventsBtn">OPEN EVENT TIMELINE</button>' +
+    '<button class="route-btn brief-copy" id="riskCopyBrief">COPY BRIEF</button></div>';
+  box.innerHTML = html;
+  const open = $("riskEventsBtn");
+  if (open) open.onclick = () => {
+    const modal = $("riskModal");
+    if (modal) modal.style.display = "none";
+    focusCountryEvents(country);
+  };
+  const copy = $("riskCopyBrief");
+  if (copy) copy.onclick = async () => {
+    const text = briefText(country, events, mentions);
+    try {
+      await navigator.clipboard.writeText(text);
+      copy.textContent = "COPIED";
+      setTimeout(() => { copy.textContent = "COPY BRIEF"; }, 1600);
+    } catch {
+      copy.textContent = "COPY FAILED";
+    }
+  };
+}
+
 export function showRiskDetail(iso) {
   const c = COUNTRIES.find(x => x.iso === iso);
   if (!c) return;
@@ -193,6 +322,7 @@ export function showRiskDetail(iso) {
     dhtml += '<div class="domain-row"><span class="domain-name">' + DOMAIN_NAMES[i] + '</span><div class="domain-bar"><div class="domain-fill" style="width:' + v + '%;background:' + dColor + '"></div></div><span class="domain-val" style="color:' + dColor + '">' + v + "</span></div>";
   }
   domains.innerHTML = dhtml;
+  renderBrief(c);
   modal.style.display = "flex";
 }
 

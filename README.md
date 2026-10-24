@@ -9,8 +9,15 @@ attachment** support, a **16-theme** design system, rich **markdown**, and a
 **floating always-on-top chat bubble** (PiP).
 
 Type a message → it goes to disk. Drop a file → it copies to a local
-`files/` folder. Close the app, reopen it, everything is still there. No
-server, no network, no account, no cloud.
+`files/` folder. Close the app, reopen it, everything is still there.
+
+**Your notes never leave this machine.** Loopback has no account, no sync and no
+Loopback server: the chat, attachments, voice notes and captures are written to
+`%APPDATA%\messenger-self-chat` and nowhere else. The hidden workspace described
+under *Network* below contacts public news/API services when you deliberately
+open it; it never sends your messages, files or settings to them. Local storage
+is not encryption — anyone with access to your Windows account can read the
+files.
 
 ---
 
@@ -23,8 +30,13 @@ npm start          # launch the desktop app
 ```
 
 That opens the Loopback window. Type into the bottom input and hit
-**Enter** to drop a note. In the chat, type `/world` to open the fullscreen
-World Monitor.
+**Enter** to drop a note.
+
+The app also has a **hidden workspace** for the person who knows how to open it.
+It is deliberately not listed in the rail, the tray, the settings or the bubble,
+and this README does not describe the way in. It is an experience secret, not a
+security boundary: the source is public, so it keeps the workspace out of the
+way rather than protecting it.
 
 ---
 
@@ -76,7 +88,7 @@ that legacy name on purpose — it follows the `name` field in `package.json`, n
 **Check which version is installed:**
 
 ```powershell
-(Get-Item "C:\Users\nguye\AppData\Local\Programs\Loopback\Loopback.exe").VersionInfo.ProductVersion
+(Get-Item "$env:LOCALAPPDATA\Programs\Loopback\Loopback.exe").VersionInfo.ProductVersion
 ```
 
 Build only a portable exe (faster, no installer):
@@ -234,11 +246,72 @@ empty folder: `mkdir assets`.
   full-bleed and tighten their padding instead of jumbling
 - Search sidebar, export JSON backup, open data folder, single-instance lock
 
+## Network and the hidden workspace
+
+**The chat itself never touches the network.** No account, no telemetry, no update check, no sync. The only
+feature that uses the internet is the hidden workspace, and only while its window is open.
+
+- It reads **public, key-less sources**: USGS (quakes), GDACS (disasters), GDELT (conflict reports), IODA
+  (outages), NOAA SWPC (space weather), Open-Meteo (weather/air quality), OpenSky, SatNOGS, EONET, World Bank,
+  Polymarket, Yahoo Finance quotes, The Space Devs **Launch Library 2** (scheduled launches from its
+  rate-limited free tier), and the RSS/Atom feeds of newsrooms listed in
+  `src/monitor/news-sources.json`.
+- Requests that need CORS help go through the main process behind an exact hostname allowlist: **HTTPS only**,
+  no credentials in the URL, redirects followed only to another allowlisted host, a **12 s deadline**, an
+  **8 MB** body cap, at most **6** requests in flight, and a per-host cooldown after `429`/`5xx` that honours
+  `Retry-After` (see `src/main/monitor-proxy.js`). CORS-friendly sources may also be fetched directly by the
+  page, but only from the hosts named in its CSP `connect-src` — there is no open origin.
+- **One owner per feed.** The main process owns news, quakes and indices; the page owns weather, air quality,
+  space weather, GDACS, GDELT, IODA, finance and aircraft. The old build fetched the same news, quakes and
+  indices from both sides *and* re-fetched the page's feeds on a 30–60 s signal. Measured with
+  `tests/bench-monitor-requests.js`, opening the monitor for 65 s dropped from **256 to 116 requests**
+  (−55%; main-process requests 220 → 82).
+- Closing or hiding the window stops main's scheduler (timers cleared, in-flight requests aborted) and pauses
+  the page's timers; showing it again resumes once, without starting a second owner.
+- **Nothing from your chat, files, voice notes, captures or settings is sent to any of these services.**
+- FEED STATUS shows **LIVE / STALE / OFFLINE** with the age of the last successful update and where the fetch
+  happened; curated material (country risk, chokepoints, the scenario model) is labelled **STATIC** with its
+  edit date, never presented as live intelligence. A failed feed renders as unreachable/stale — it is never
+  turned into "no events".
+
+### Inside the hidden workspace
+
+Everything below is rendered in the separate monitor window only; none of it appears in the chat, rail, tray
+or bubble.
+
+- **One event stream.** Quakes, GDACS disasters, GDELT conflict reports, internet outages and severe weather
+  are normalized into a single bounded store (a fixed memory/history cap, deterministic IDs, per-poll dedupe).
+  The timeline filters that stream by time window, category, severity and source; an event opens its own detail
+  card with the original source link, and only events that actually carry coordinates move the map. Events
+  with no location stay searchable and readable. Air-quality and space-weather readings stay in their own
+  panels because a measurement is not an event.
+- **Search that reaches the data.** The existing `Ctrl/Cmd+K` palette now also searches cached headlines,
+  normalized events, country names/codes and every map layer/widget — not just the static tabs. It matches
+  on tokens, shows source/severity/time metadata and never performs a network request per keystroke.
+- **Country intelligence brief.** Clicking a country keeps the static risk baseline but adds matching recent
+  headlines and events (with source links), nearby infrastructure where a location is known, a coverage-gap
+  note and a "last updated" line. Baseline scores are labelled separately from live evidence.
+- **Watchlist with real rules.** Add keyword, country, category and minimum-severity rules; enable/disable and
+  delete them; the engine dedupes by event, enforces a per-rule cooldown, records trigger history with links
+  and can raise a native notification. No rule fires without a matching event from a real feed.
+- **Source health and trending topics.** Each feed reports its last success, latency, consecutive failures,
+  error category and LIVE/STALE/OFFLINE state; a compact trending panel compares the last 24 hours of
+  headlines with the prior week, requires several distinct sources and lists sample stories instead of
+  presenting frequency as danger.
+- **Launch schedule.** Upcoming orbital launches with provider, pad and a countdown that rolls from T-minus
+  into T-plus for the first day after the window, plus the launch time in UTC and a direct source link. It is a
+  schedule, not a guarantee: a failed request shows Launch Library 2 as unreachable instead of inventing a
+  launch, and an upstream status change remains visible.
+- **Panel isolation.** A dead feed leaves its own card in an OFFLINE state and cannot blank the rest of the
+  workspace; the close path still tears down the scheduler and page timers.
+
 ## Where data lives
 
 ```
-C:\Users\<you>\AppData\Roaming\messenger-self-chat\
-├── messages.json    # chats + messages (each message has a chatId)
+%APPDATA%\messenger-self-chat\
+├── messages.json    # chats + messages (each message has a chatId) + .bak
+├── meta.json        # data schema version written by the migration
+├── backups\         # verified copies made before a migration (never deleted)
 ├── settings.json    # dark mode + theme + bubble size + floating-bar options
 │                    #   (pipOnStartup, pipOnMinimize, pipDock, startAtLogin,
 │                    #    runInBackground)
@@ -246,8 +319,17 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
 ├── quick.json       # quick-note target chat
 ├── error.log        # last main-process errors (see "Notes")
 ├── files\           # attached file contents (UUID-named)
-└── voice\           # recorded voice messages (UUID-named)
+├── voice\           # recorded voice messages (UUID-named)
+└── captures\        # screenshots + screen recordings
 ```
+
+`messages.json` and `settings.json` are written atomically (temporary file →
+`rename`), and the previous version is kept as `.bak`. The first launch after
+this schema existed also copies the data files into `backups\<date-time>\`
+and verifies the copies before rewriting anything; that backup is never removed
+by the app. **The folder name stays `messenger-self-chat` on purpose** — it
+follows `name` in `package.json`, so renaming it would look like every note had
+been lost.
 
 ## Project layout
 
@@ -258,7 +340,7 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
 | `index.html`            | Messenger UI markup                                            |
 | `styles.css`            | 16 themes, animations, markdown styles, PiP bubble             |
 | `src/renderer/`         | Renderer logic, split into ES modules by feature (see below)   |
-| `monitor.html/js/css`   | World-monitor fullscreen window (Launched with `/world`)        |
+| `monitor.html/js/css`   | Hidden fullscreen workspace (not listed anywhere in the UI)     |
 | `monitor-preload.js`    | Preload for the monitor window                                  |
 | `quick.html/js`         | Quick-note capture popup (global `Ctrl+Alt+N`)                  |
 | `cam.html/js/preload`   | Floating camera bubble (while recording from the floating bar)   |
@@ -294,8 +376,24 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
 
 ## Notes
 
-- The renderer has `contextIsolation: true` and no Node access — all disk I/O
-  happens in the main process via IPC. Safe default.
+- Every window uses `contextIsolation: true` and `nodeIntegration: false`. The chat windows need
+  `webUtils.getPathForFile` for drag-and-drop and therefore stay unsandboxed; the monitor, quick note,
+  screenshot picker, review card and camera bubble run with Electron's **sandbox enabled**. All disk I/O
+  happens in the main process via IPC.
+- Electron's session permissions are **per window role**, not "yes to everything": only the chat windows may
+  use the microphone/camera/display capture, the monitor may use fullscreen + clipboard, the review card only
+  the clipboard, and the picker/quick-note/camera bubble none. `setDisplayMediaRequestHandler` refuses capture
+  from any other page and from a request without a user gesture.
+- Every IPC channel has a role policy in `src/main/ipc-policy.js`, checked against the page that **actually
+  loaded** (a `file://` page directly in the app folder, main frame only). The monitor cannot read the store or
+  files; the chat cannot use the monitor proxy or system-metrics channels; the picker cannot save captures.
+- External links are parsed and validated before anything reaches the OS browser: **https only**, no
+  credentials, no local/private hosts. `setWindowOpenHandler` denies every child window; `will-navigate`
+  refuses navigation away from the app's own files and opens a safe link externally instead.
+- Leaflet is **bundled** at `assets/vendor/leaflet/` (BSD-2-Clause, hashes in that folder's README) instead
+  of being loaded from `unpkg.com`; the monitor's CSP no longer allows any third-party script origin.
+- Renderer HTML is built from live feed data with escaping (`esc`/`escAttr`) and `safeHref`; the threat log no
+  longer inserts a raw earthquake place, and feed-supplied `href`s cannot become `javascript:` links.
 - A custom `local-file://` protocol serves file bytes back to the renderer so
   images can render inline without exposing the filesystem. It resolves names
   across `files/`, `voice/` **and** `captures/` (whichever actually holds the
@@ -349,6 +447,16 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
   instead), and it launches.
 - The global hotkey is registered best-effort: if another app already owns
   `Ctrl+Alt+N` the ⚡ rail button still opens the popup (a warning is logged).
+- **Unit tests**: `npm test` runs `node --test "tests/*.test.js"` — pure-logic suites with no display and no
+  network: atomic writes, the portable janitor, the IPC role policy, external-URL validation, the feed
+  scheduler (one owner per feed, overlap guard, backoff, abort, timeout), the monitor proxy (allowlist,
+  redirects, body cap, cooldowns, concurrency), the chat store (revision guard, stale quick note, size cap) and
+  the data migration (verified backup, idempotence, refuses a corrupt file). The monitor's new pure logic is
+  covered too: event normalization/deduplication/time parsing, country matching, palette token matching,
+  watch-rule matching with cooldowns, and the trending baseline counts.
+  `npx electron tests/bench-monitor-requests.js 60` is the request counter behind the before/after numbers in
+  *Network and the hidden workspace*. The manual Windows/installer checks live in
+  [QA-CHECKLIST.md](QA-CHECKLIST.md) and are not claimed as automated coverage.
 - `audittest.js` (`npx electron audittest.js`) is the "is the app healthy and
   ready to use?" sweep: opens and closes **every** window (side panels, the
   floating bar in all its states, the monitor, the quick note, the screenshot
@@ -408,15 +516,19 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
   so your real Downloads folder and library are untouched.
 - `searchtest.js` (`npx electron searchtest.js`) smoke-tests global search +
   quick capture against the real app and restores your data afterwards.
-- `monitortest.js` (`npx electron monitortest.js`) exercises the `/world`
-  World Monitor's realtime contract: the Finance tab survives one dead feed
+- `monitortest.js` (`npx electron monitortest.js`) exercises the hidden
+  workspace's realtime contract: the Finance tab survives one dead feed
   (each section owns its OFFLINE state instead of a blanket catch blanking the
   tab), its self-update timers exist at the right cadences (crypto 3m,
   Fear & Greed 5m, Polymarket prediction markets 2m, World Bank macro 60m),
   the INFRA port-weather table re-polls every 5 minutes, unreachable GDACS /
   GDELT / IODA feeds say "unreachable — retrying…" instead of faking a quiet
   world, GDELT's `seendate` renders a real date, and the threat log timestamps
-  in UTC like the events log beside it.
+  in UTC like the events log beside it. It also drives the new surfaces: a
+  deduplicated all-category timeline (filter, detail, map centering), palette
+  search over cached events, the country brief's live-evidence join and static
+  label, a saved watch rule that fires once and respects its cooldown, feed
+  health with last-success/error detail, and cross-source trending topics.
 - The collapsed bubble is a real 56×248 (vertical) or 280×52 (horizontal)
   window, so its in-window UI adapts: the recording HUD drops to icon-only
   controls under 400px wide, stacks vertically in the narrow bubble, and
@@ -493,7 +605,8 @@ C:\Users\<you>\AppData\Roaming\messenger-self-chat\
 - A last-resort `uncaughtException` / `unhandledRejection` handler writes stray
   main-process errors to `error.log` in the data folder (trimmed at 256 KB)
   instead of showing that modal dialog to the user.
-- CSP allows only same-origin + the data sources the monitor needs.
+- CSP: the chat page allows only its own scripts/styles plus `local-file:` media; the monitor allows only
+  `'self'` scripts and the data sources it actually uses (no CDN, no remote script).
 - UI is responsive — drag the window narrow and the sidebar collapses.
 - Renderer code is split into ES modules under `src/renderer/`; no bundler —
   Electron >= 28 loads native ES modules directly via `<script type="module">`.

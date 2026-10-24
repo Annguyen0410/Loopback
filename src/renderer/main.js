@@ -177,7 +177,17 @@ function initPipMode() {
       try { bubble.setPointerCapture(e.pointerId); } catch {}
       // Refresh base in background; moves wait until it arrives.
       Promise.resolve(api.pip.dragStart()).then(pos => {
-        if (dragState && dragState.id === e.pointerId && pos) dragState.base = pos;
+        if (!dragState || dragState.id !== e.pointerId || !pos) return;
+        dragState.base = pos;
+        /* A move that arrived before the base did still counts. It used to be dropped outright, which is
+           what the *first* drag of a freshly opened bubble felt like: the pill ignored the pointer, then
+           jumped once the round trip finished. Applying the movement the moment the base lands costs one
+           more message and makes the first drag behave like every later one. */
+        if (!dragState.moved || !dragState.delta) return;
+        const target = { x: pos.x + dragState.delta.dx, y: pos.y + dragState.delta.dy };
+        lastSend = performance.now();
+        api.pip.dragTo(target);
+        pendingPos = null;
       }).catch(() => {});
     });
 
@@ -187,7 +197,10 @@ function initPipMode() {
       const dy = e.screenY - dragState.sy;
       if (!dragState.moved && Math.abs(dx) + Math.abs(dy) > 4) dragState.moved = true;
       if (dragState.moved) { expandArmed = false; dragMoved = true; }
-      if (!dragState.moved || !dragState.base) return;
+      if (!dragState.moved) return;
+      // Remembered whether or not the base has arrived yet; see the dragStart callback above.
+      dragState.delta = { dx, dy };
+      if (!dragState.base) return;
       pendingPos = { x: dragState.base.x + dx, y: dragState.base.y + dy };
       const now = performance.now();
       if (now - lastSend >= 16) {

@@ -12,6 +12,12 @@ const path = require("path");
 const fs = require("fs");
 const { app, BrowserWindow, ipcMain } = require("electron");
 
+/* A throwaway profile for the same reason the other suites have one: this test rewrites messages.json on
+   purpose, and it should never be your real chat. */
+if (process.env.SEARCHTEST_USERDATA) {
+  fs.mkdirSync(process.env.SEARCHTEST_USERDATA, { recursive: true });
+  app.setPath("userData", process.env.SEARCHTEST_USERDATA);
+}
 const USER_DATA = app.getPath("userData");
 const F = {
   data: path.join(USER_DATA, "messages.json"),

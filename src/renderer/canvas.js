@@ -5,6 +5,7 @@
 import { $ } from "./dom.js";
 import { settings } from "./state.js";
 import { addMessage } from "./messages.js";
+import { toast } from "./toast.js";
 
 let canvas = null;
 let ctx = null;
@@ -107,7 +108,8 @@ export function initCanvas() {
   $("btnClearCanvas").addEventListener("click", clearCanvas);
   $("btnSendCanvas").addEventListener("click", async () => {
     const file = await window.api.saveCanvas(canvas.toDataURL("image/png"));
-    if (file) await addMessage("", [file]);
+    if (file && file.storedName) await addMessage("", [file]);
+    else if (file && file.error) toast("Could not save the drawing (" + file.error + ")");
     closeCanvas();
   });
 

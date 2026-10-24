@@ -15,16 +15,56 @@ export const FEEDS = {}; // name -> { name, status, lastOk, lastErr, count, late
 function now() { return Date.now(); }
 
 function record(name, ok, err, latency) {
-  const f = FEEDS[name] || (FEEDS[name] = { name, status: "OFFLINE", lastOk: 0, lastErr: "", count: 0, latency: 0 });
+  const f = FEEDS[name] || (FEEDS[name] = {
+    name, status: "OFFLINE", lastOk: 0, lastErr: "", count: 0, latency: 0,
+    source: "page", lastAttempt: 0, fails: 0, lastErrAt: 0
+  });
   f.latency = latency;
-  if (ok) { f.status = "LIVE"; f.lastOk = now(); f.lastErr = ""; f.count++; }
-  else {
+  f.source = "page";
+  f.lastAttempt = now();
+  if (ok) {
+    f.status = "LIVE";
+    f.lastOk = now();
+    f.lastErr = "";
+    f.fails = 0;
+    f.count++;
+  } else {
+    f.fails = (f.fails || 0) + 1;
+    f.lastErrAt = now();
     if (f.lastOk && now() - f.lastOk < 15 * 60 * 1000) f.status = "STALE";
     else f.status = "OFFLINE";
     f.lastErr = String(err || "unknown").slice(0, 120);
   }
   renderFeedStatus();
 }
+
+/**
+ * A feed fetched by the single owner in the main process (news/quakes/indices). The page does not poll these
+ * any more, so its own counter would never see them; this is how they appear in FEED STATUS with the truth
+ * main reports — including OFFLINE/STALE, which must never be rendered as "no events".
+ */
+export function noteFeedStatus(update) {
+  if (!update || !update.feed) return;
+  const f = FEEDS[update.feed] || (FEEDS[update.feed] = {
+    name: update.feed, status: "OFFLINE", lastOk: 0, lastErr: "", count: 0, latency: 0, source: "main"
+  });
+  f.source = "main";
+  f.status = update.status || f.status;
+  if (update.lastOk) f.lastOk = update.lastOk;
+  if (update.lastAttempt) f.lastAttempt = update.lastAttempt;
+  if (Number.isFinite(update.failures)) f.fails = update.failures;
+  f.lastErr = String(update.lastErr || "").slice(0, 120);
+  if (f.lastErr) f.lastErrAt = now();
+  if (update.status === "LIVE") f.count++;
+  renderFeedStatus();
+}
+
+/* Reference material — curated in the app, not fetched. It is listed separately and labelled STATIC so a
+   country score can never be mistaken for live intelligence. */
+const REFERENCE_SOURCES = [
+  { name: "country risk index", updated: "edited 2026-10" },
+  { name: "maritime chokepoints", updated: "edited 2026-10" }
+];
 
 const DIRECT_OK = new Set();   // hosts that answered directly at least once
 const THROTTLED = new Set();   // hosts that returned 429 — skip direct attempts
@@ -77,16 +117,29 @@ export function renderFeedStatus() {
   if (!el) return;
   const keys = Object.keys(FEEDS).sort();
   if (!keys.length) { el.innerHTML = '<div class="panel-empty">No feeds yet</div>'; return; }
+  const esc = t => String(t == null ? "" : t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   let html = "";
   for (const k of keys) {
     const f = FEEDS[k];
     const dotCls = f.status === "LIVE" ? "live" : f.status === "STALE" ? "stale" : "off";
     const age = f.lastOk ? Math.round((now() - f.lastOk) / 1000) : null;
     const ageStr = age == null ? "never" : age < 60 ? age + "s" : Math.round(age / 60) + "m";
-    html += '<div class="fs-row" title="' + (f.lastErr || "ok") + '">' +
+    const latency = f.latency ? " · " + Math.round(f.latency) + "ms" : "";
+    const title = (f.source === "main" ? "Fetched by the app's single owner" : "Fetched by this page") +
+      " · last success " + (age == null ? "never" : ageStr + " ago") +
+      (f.lastErr ? " · last error: " + f.lastErr : " · no error") +
+      (f.fails ? " · " + f.fails + " consecutive failure(s)" : "");
+    html += '<div class="fs-row" title="' + esc(title) + '">' +
       '<span class="fs-dot ' + dotCls + '"></span>' +
-      '<span class="fs-name">' + f.name + '</span>' +
-      '<span class="fs-meta">' + f.status.toLowerCase() + ' · ' + ageStr + '</span>' +
+      '<span class="fs-name">' + esc(f.name) + '</span>' +
+      '<span class="fs-meta">' + esc(f.status.toLowerCase()) + ' · ok ' + esc(ageStr) + esc(latency) + '</span>' +
+      '</div>';
+  }
+  for (const s of REFERENCE_SOURCES) {
+    html += '<div class="fs-row" title="Curated in the app — static reference, not a live feed">' +
+      '<span class="fs-dot static"></span>' +
+      '<span class="fs-name">' + esc(s.name) + '</span>' +
+      '<span class="fs-meta">static · ' + esc(s.updated) + '</span>' +
       '</div>';
   }
   el.innerHTML = html;

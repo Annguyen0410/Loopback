@@ -6,6 +6,7 @@
 import { $ } from "./dom.js";
 import { addMessage } from "./messages.js";
 import { openCanvas } from "./canvas.js";
+import { toast } from "./toast.js";
 
 function hideAttachPopover() {
   const p = $("attachPopover");
@@ -75,7 +76,9 @@ export function initComposer() {
           const reader = new FileReader();
           reader.onloadend = async () => {
             const saved = await window.api.savePasted({ name: "pasted-" + Date.now(), dataUrl: reader.result });
-            if (saved) await addMessage("", [saved]);
+            // Main refuses oversized or malformed data with an error object; it must not become an attachment.
+            if (saved && saved.storedName) await addMessage("", [saved]);
+            else if (saved && saved.error) toast("Could not attach that image (" + saved.error + ")");
           };
           reader.readAsDataURL(file);
           return;

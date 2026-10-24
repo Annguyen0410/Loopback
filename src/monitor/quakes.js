@@ -2,8 +2,7 @@
  * Live earthquakes (USGS) + moon phase illustration.
  */
 
-import { $, fmtTime } from "./utils.js";
-import { fetchJSON } from "./net.js";
+import { $, esc, fmtTime } from "./utils.js";
 import { map } from "./map-engine.js";
 import { logWorldEvent } from "./events.js";
 import { setThreatInput } from "./threat-level.js";
@@ -43,21 +42,9 @@ export function setQuakeMajorOnly(on) { majorOnly = !!on; renderQuakes(); }
 
 export function onQuakes(cb) { quakesCallback = cb; }
 
-export async function fetchQuakes() {
-  try {
-    const data = await fetchJSON("quakes", "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson", { direct: false });
-    if (data && data.features && data.features.length) {
-      applyQuakeData(data);
-      return data;
-    }
-  } catch { /* recorded by fetchJSON */ }
-  // No simulated earthquakes: an empty feed shows an empty state rather than
-  // inventing seismic events (they also reached the event log and threat level).
-  if (!quakeData) renderQuakeEmptyState();
-  return quakeData;
-}
-
-function renderQuakeEmptyState() {
+/* No fetchQuakes() here: the USGS feed has one owner, the main process, and arrives through
+   applyLiveQuakes(). A second poller here is exactly the duplication that doubled the request count. */
+export function renderQuakeEmptyState() {
   const st = $("stats");
   if (st) {
     st.innerHTML =
@@ -106,7 +93,8 @@ function renderQuakes() {
     });
     circle.bindPopup(
       '<div class="popup-mag" style="color:' + color + '">M ' + mag.toFixed(1) + "</div>" +
-      '<div class="popup-place">' + (f.properties.place || "Unknown") + "</div>" +
+      // `place` comes from an external feed: escaped, never concatenated raw.
+      '<div class="popup-place">' + esc(f.properties.place || "Unknown") + "</div>" +
       '<div class="popup-row"><span class="popup-label">Depth</span><span class="popup-value">' + depth.toFixed(1) + " km</span></div>" +
       '<div class="popup-row"><span class="popup-label">Time</span><span class="popup-value">' + fmtTime(f.properties.time) + "</span></div>" +
       (f.properties.tsunami ? '<div class="popup-row"><span class="popup-label">Tsunami</span><span class="popup-value" style="color:#ff4444">Yes</span></div>' : "")
@@ -145,7 +133,8 @@ export function renderTicker(features) {
     const m = q.properties.mag;
     const p = (q.properties.place || "?").replace(/,?\s*region of/i, "").trim();
     const d = q.geometry.coordinates[2];
-    html += '<span class="tq-item"><span class="tq-mag" style="background:' + magBg(m) + '">M' + m.toFixed(1) + '</span><span class="tq-place">' + p + '</span><span class="tq-depth">' + d.toFixed(0) + "km</span></span>";
+    const mag = Number.isFinite(m) ? m.toFixed(1) : "?";
+    html += '<span class="tq-item"><span class="tq-mag" style="background:' + magBg(m) + '">M' + mag + '</span><span class="tq-place">' + esc(p) + '</span><span class="tq-depth">' + Number(d).toFixed(0) + "km</span></span>";
   }
   tk.innerHTML = html + html;
 }
@@ -162,7 +151,14 @@ function recordQuakeIntel(features) {
         sev: m >= 6 ? "crit" : m >= 5 ? "warn" : "info",
         title: "M" + m.toFixed(1) + " — " + (f.properties.place || "Unknown"),
         time: f.properties.time,
-        key: "q" + (f.id || (f.properties.time + "|" + m))
+        key: "q" + (f.id || (f.properties.time + "|" + m)),
+        source: "USGS",
+        sourceUrl: "https://earthquake.usgs.gov/",
+        url: f.properties.url,
+        lat: f.geometry.coordinates[1],
+        lng: f.geometry.coordinates[0],
+        value: m,
+        quality: "official"
       });
     }
   }

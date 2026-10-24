@@ -12,3 +12,6 @@ _asarcheck/
 .qoder/
 .qodo/
 .agents/
+
+# build artifacts that are not releases
+dist-usezip/

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https:; connect-src 'self' https://api.open-meteo.com https://air-quality-api.open-meteo.com https://open.er-api.com https://api.coingecko.com https://api.alternative.me https://min-api.cryptocompare.com https://www.gdacs.org https://api.gdeltproject.org https://api.ioda.inetintel.cc.gatech.edu https://unpkg.com https://feeds.bbci.co.uk https://services.swpc.noaa.gov https://api.openaq.org https://db.satnogs.org https://www.youtube.com https://api.worldbank.org https://marine-api.open-meteo.com https://gamma-api.polymarket.com;">
+  <meta charset="utf-8">    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://api.open-meteo.com https://air-quality-api.open-meteo.com https://open.er-api.com https://api.coingecko.com https://api.alternative.me https://min-api.cryptocompare.com https://www.gdacs.org https://api.gdeltproject.org https://api.ioda.inetintel.cc.gatech.edu https://feeds.bbci.co.uk https://services.swpc.noaa.gov https://api.openaq.org https://db.satnogs.org https://www.youtube.com https://api.worldbank.org https://marine-api.open-meteo.com https://gamma-api.polymarket.com https://ll.thespacedevs.com;">
   <title>World Monitor</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="monitor.css">
 </head>
 <body>
@@ -38,6 +38,8 @@
     <div class="sb-tabs" role="tablist" aria-label="Monitor sections">
       <button class="sb-tab active" data-tab="intel" title="Intel &amp; Disasters" role="tab" aria-selected="true">📡<span class="sb-tab-label">INTEL</span></button>
       <button class="sb-tab" data-tab="risk" title="Country Risk" role="tab" aria-selected="false">🌍<span class="sb-tab-label">RISK</span></button>
+      <button class="sb-tab" data-tab="events" title="Unified event timeline" role="tab" aria-selected="false">📋<span class="sb-tab-label">EVENTS</span></button>
+      <button class="sb-tab" data-tab="watch" title="Watchlist and alerts" role="tab" aria-selected="false">🔔<span class="sb-tab-label">WATCH</span></button>
       <button class="sb-tab" data-tab="route" title="Route Explorer" role="tab" aria-selected="false">🚢<span class="sb-tab-label">ROUTE</span></button>
       <button class="sb-tab" data-tab="scenario" title="Scenario Engine" role="tab" aria-selected="false">⚡<span class="sb-tab-label">SCEN</span></button>
       <button class="sb-tab" data-tab="finance" title="Financial Data" role="tab" aria-selected="false">💹<span class="sb-tab-label">FIN</span></button>
@@ -68,6 +70,10 @@
           <div class="fin-table" id="topSignals"><div class="panel-loading"><div class="skel"></div><div class="skel w-90"></div><div class="skel w-60"></div></div></div>
         </div>
         <div class="fin-section">
+          <div class="fin-sec-title">SPACE LAUNCHES <span class="choke-ref">LAUNCH LIBRARY 2</span></div>
+          <div class="fin-table" id="launchList"><div class="panel-loading"><div class="skel w-90"></div><div class="skel w-60"></div></div></div>
+        </div>
+        <div class="fin-section">
           <div class="fin-sec-title">INSTABILITY INDEX — TOP 5</div>
           <div class="fin-table" id="instabilityList"></div>
         </div>
@@ -79,6 +85,8 @@
       <!-- RISK TAB -->
       <div class="sb-content" id="sbRisk">
         <input class="sb-search" id="riskSearch" placeholder="Search country or ISO...">
+        <!-- Curated, not fetched: labelled so a reference score is never read as live intelligence. -->
+        <div class="risk-ref" title="Scores are edited into the app; they are not a live feed">STATIC · reference assessment — edited 2026-10</div>
         <div class="risk-hdr">
           <span class="risk-sort pinned-sort" id="sortPinned" title="Pinned first">📌</span>
           <span class="risk-sort name-sort active" data-sort="name" id="sortName">COUNTRY ▲</span>
@@ -88,6 +96,81 @@
           <span class="risk-hdr-lbl" title="Travel Advisory">✈</span>
         </div>
         <div class="sb-list" id="riskList"></div>
+      </div>
+      <!-- EVENTS TAB -->
+      <div class="sb-content" id="sbEvents">
+        <input class="sb-search" id="evSearch" placeholder="Filter title, source or country..." autocomplete="off">
+        <div class="ev-filter-grid">
+          <select class="ev-select" id="evTime" aria-label="Event time window">
+            <option value="1">LAST 1H</option>
+            <option value="6">LAST 6H</option>
+            <option value="24" selected>LAST 24H</option>
+            <option value="72">LAST 72H</option>
+          </select>
+          <select class="ev-select" id="evCategory" aria-label="Event category"><option value="">ALL CATEGORIES</option></select>
+          <select class="ev-select" id="evSeverity" aria-label="Event severity">
+            <option value="">ANY SEVERITY</option>
+            <option value="warn">WARN +</option>
+            <option value="crit">CRITICAL</option>
+          </select>
+        </div>
+        <div class="ev-toolbar"><span class="ev-country-chip" id="evCountryChip" hidden></span><span class="ev-count" id="evCount"></span></div>
+        <div class="ev-list" id="evList"></div>
+        <div class="ev-detail" id="evDetail" hidden></div>
+        <div class="fin-section">
+          <div class="fin-sec-title">TRENDING TOPICS <span class="choke-ref">DERIVED</span></div>
+          <div id="trendList"><div class="panel-empty">Not enough cross-source headlines yet.</div></div>
+        </div>
+      </div>
+      <!-- WATCH TAB -->
+      <div class="sb-content" id="sbWatch">
+        <div class="watch-form" id="watchForm">
+          <div class="watch-form-title" id="watchFormTitle">NEW RULE</div>
+          <select class="ev-select" id="watchKind" aria-label="Rule type">
+            <option value="keyword">KEYWORD / PHRASE</option>
+            <option value="country">COUNTRY</option>
+            <option value="category">EVENT CATEGORY</option>
+            <option value="magnitude">MAGNITUDE FLOOR</option>
+          </select>
+          <input class="sb-search watch-input" id="watchValue" placeholder="e.g. ceasefire, Taiwan, port" autocomplete="off">
+          <select class="ev-select" id="watchCategory" aria-label="Event category rule" hidden>
+            <option value="QUAKE">EARTHQUAKE</option>
+            <option value="CYCLONE">CYCLONE</option>
+            <option value="FLOOD">FLOOD</option>
+            <option value="VOLCANO">VOLCANO</option>
+            <option value="WILDFIRE">WILDFIRE</option>
+            <option value="DROUGHT">DROUGHT</option>
+            <option value="DISASTER">ANY DISASTER</option>
+            <option value="CONFLICT">CONFLICT</option>
+            <option value="OUTAGE">INTERNET OUTAGE</option>
+            <option value="WEATHER">SEVERE WEATHER</option>
+            <option value="NEWS">NEWS HEADLINE</option>
+          </select>
+          <input class="sb-search watch-input watch-number" id="watchNumber" type="number" min="0" max="10" step="0.1" placeholder="Minimum magnitude, e.g. 6" aria-label="Minimum magnitude" hidden>
+          <select class="ev-select" id="watchSeverity" aria-label="Minimum severity">
+            <option value="info">ANY SEVERITY</option>
+            <option value="warn">WARN +</option>
+            <option value="crit">CRITICAL ONLY</option>
+          </select>
+          <div class="watch-checks">
+            <label><input type="checkbox" id="watchSound" checked> tone</label>
+            <label><input type="checkbox" id="watchNotify"> desktop</label>
+          </div>
+          <div class="watch-error" id="watchError" hidden></div>
+          <div class="watch-actions">
+            <button class="route-btn watch-add" id="watchAdd">ADD RULE</button>
+            <button class="route-btn watch-cancel" id="watchCancel" hidden>CANCEL</button>
+          </div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">ACTIVE RULES</div>
+          <div id="watchRules"><div class="panel-empty">No rules yet.</div></div>
+        </div>
+        <div class="fin-section">
+          <div class="fin-sec-title">TRIGGER HISTORY <span class="choke-ref" id="watchHistoryCount">0</span><button class="watch-clear" id="watchClearHistory" title="Clear trigger history">CLEAR</button></div>
+          <div id="watchHistory"><div class="panel-empty">No rule has fired yet.</div></div>
+        </div>
+        <div class="watch-note">Rules match cached records from real feeds only. One record can fire a rule once; each rule has a 10-minute cooldown.</div>
       </div>
       <!-- ROUTE TAB -->
       <div class="sb-content" id="sbRoute">
@@ -112,6 +195,8 @@
       </div>
       <!-- SCENARIO TAB -->
       <div class="sb-content" id="sbScenario">
+        <!-- Hand-authored scenarios: the percentages are illustrative, not a live forecast. -->
+        <div class="risk-ref" title="Scenarios are edited into the app; the percentages are illustrative and not a live forecast">STATIC · scenario model — illustrative, not a forecast</div>
         <div class="scen-list" id="scenList"></div>
         <button class="scen-btn scen-clear" id="scenClear">✕ Clear Scenario</button>
       </div>
@@ -361,7 +446,7 @@
 
   <!-- ================= COMMAND PALETTE (Ctrl+K) ================= -->
   <div class="palette" id="palette" hidden>
-    <input class="palette-input" id="paletteInput" placeholder="Search tabs, layers, countries, widgets…  (Ctrl+K)" autocomplete="off" aria-label="Command palette search">
+    <input class="palette-input" id="paletteInput" placeholder="Search events, headlines, countries, tabs and layers…  (Ctrl+K)" autocomplete="off" aria-label="Command palette search">
     <div class="palette-results" id="paletteResults"></div>
   </div>
 
@@ -372,10 +457,11 @@
       <div class="modal-title" id="riskModalTitle"></div>
       <div class="modal-scores" id="riskModalScores"></div>
       <div class="modal-domains" id="riskModalDomains"></div>
+      <div class="modal-brief" id="riskModalBrief"></div>
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="assets/vendor/leaflet/leaflet.js"></script>
   <script type="module" src="src/monitor/main.js"></script>
 </body>
 </html>

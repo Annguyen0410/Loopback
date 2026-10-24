@@ -1,13 +1,12 @@
 /**
- * Finance tab — live crypto / indices / commodities / FX / yield from
- * monitor:indices + public APIs, plus real annual macro figures from the
- * World Bank. Central-bank policy rates and prediction markets have no free
- * live source → OFFLINE empty (never hardcoded).
+ * Finance tab — live crypto / commodities / FX / yield from the main-process index push, plus real annual
+ * macro figures from the World Bank. Quotes have exactly ONE owner (src/main/monitor-scheduler.js); this module
+ * renders what it is pushed and never fetches indices itself. Central-bank policy rates and prediction markets
+ * have no free live source → OFFLINE empty (never hardcoded).
  */
 
 import { $, esc } from "./utils.js";
 import { fetchJSON } from "./net.js";
-import { api } from "./bridge.js";
 import { fetchIndicator, INDICATORS } from "./worldbank.js";
 
 const MACRO_COUNTRIES = ["WLD", "US", "CN", "IN", "DE", "BR"];
@@ -383,44 +382,17 @@ async function loadLiveFinance() {
       renderTable("finCurrencies", rowsFromMap(map, FX_MAP));
       const fxDot = $("finFxDot");
       if (fxDot) fxDot.style.display = "inline-block";
-    } else if (api && api.fetchIndices) {
-      try {
-        const d = await api.fetchIndices();
-        const result = d && d.quoteResponse && d.quoteResponse.result;
-        if (result && result.length) {
-          map = quoteMap(result);
-          got.indices = true;
-          renderStockTable(result);
-          renderTable("finCommodities", rowsFromMap(map, COMMODITY_MAP));
-          renderTable("finCurrencies", rowsFromMap(map, FX_MAP));
-          const fxDot = $("finFxDot");
-          if (fxDot) fxDot.style.display = "inline-block";
-        } else {
-          emptyTable("finCommodities", "OFFLINE");
-          emptyTable("finCurrencies", "OFFLINE");
-          renderStockTable(null);
-        }
-      } catch {
-        emptyTable("finCommodities", "OFFLINE");
-        emptyTable("finCurrencies", "OFFLINE");
-        renderStockTable(null);
-      }
     } else {
-      emptyTable("finCommodities", "OFFLINE");
-      emptyTable("finCurrencies", "OFFLINE");
-      emptyTable("finStocks", "OFFLINE");
+      // The first index push has not arrived yet (or the owner is offline). Honest states only: FED STATUS
+      // shows indices as OFFLINE/STALE, and this table fills itself the moment a push lands.
+      emptyTable("finCommodities", "Waiting for quote feed…");
+      emptyTable("finCurrencies", "Waiting for quote feed…");
+      renderStockTable(null);
     }
 
-    let y2 = map.get("2YY=F") || null;
-    if (api && api.fetch2YYield) {
-      try {
-        const y = await api.fetch2YYield();
-        const meta = y && y.chart && y.chart.result && y.chart.result[0] && y.chart.result[0].meta;
-        if (meta && meta.regularMarketPrice != null) y2 = meta;
-      } catch { /* fall back to 2YY=F from indices */ }
-    }
+    const y2 = map.get("2YY=F") || null;
     renderYieldLive(map, y2);
-    got.yield = !!(map.size || y2);
+    got.yield = !!map.size;
 
     const [cryptoOk, fgOk] = await Promise.all([loadCrypto(), loadFearGreed()]);
     got.crypto = cryptoOk;

@@ -2,7 +2,7 @@
  * Geopolitics: GDELT events & IODA internet outages (both no-key).
  */
 
-import { $, esc } from "./utils.js";
+import { $, esc, safeHref } from "./utils.js";
 import { fetchJSON } from "./net.js";
 import { setConflict } from "./map-layers.js";
 import { logWorldEvent } from "./events.js";
@@ -89,7 +89,7 @@ export function renderGDELT(articles) {
     const t = seenDateMs(a.seendate);
     const dt = t ? new Date(t).toISOString().slice(0, 10) : "";
     html += '<div class="gdelt-row"><span class="gdelt-source">' + esc(a.domain || "?") + "</span>" +
-      '<span class="gdelt-title"><a href="' + a.url + '" target="_blank" rel="noopener">' + esc((a.title || "").slice(0, 110)) + "</a></span>" +
+      '<span class="gdelt-title"><a href="' + safeHref(a.url) + '" target="_blank" rel="noopener">' + esc((a.title || "").slice(0, 110)) + "</a></span>" +
       '<span class="gdelt-date">' + dt + "</span></div>";
   }
   // Surface a handful of conflicts in the live events log — with the
@@ -98,8 +98,13 @@ export function renderGDELT(articles) {
     logWorldEvent({
       cat: "CONFLICT", sev: "info",
       title: (a.title || "").slice(0, 90),
-      time: seenDateMs(a.seendate) || undefined,
-      key: "gdelt" + (a.url || a.title || Math.random())
+      time: seenDateMs(a.seendate),
+      key: "gdelt" + (a.url || a.title || ""),
+      source: a.domain || "GDELT",
+      sourceUrl: "https://www.gdeltproject.org/",
+      url: a.url,
+      summary: "GDELT conflict/protest report · outlet " + (a.domain || "unknown"),
+      quality: "media"
     });
   }
   el.innerHTML = html;
@@ -165,7 +170,12 @@ export function renderIODA(events) {
       logWorldEvent({
         cat: "OUTAGE", sev: "warn",
         title: r.name + " — outage " + dur,
-        key: "ioda" + r.code + Math.round(r.score)
+        key: "ioda" + r.code + Math.round(r.score),
+        source: "IODA",
+        sourceUrl: "https://ioda.inetintel.cc.gatech.edu/",
+        country: /^[a-z]{2}$/i.test(r.code) ? r.code : "",
+        summary: "IODA anomaly score " + Math.round(r.score) + " · source " + (r.ev.datasource || "unknown"),
+        quality: "official"
       });
     }
     html += '<div class="ioda-row" title="IODA anomaly score ' + Math.round(r.score) + ' · source ' + esc(r.ev.datasource || "?") + '">' +

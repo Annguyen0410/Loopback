@@ -6,26 +6,12 @@
  * renders OFFLINE rather than filling the ticker with invented stories.
  */
 
-import { $, esc } from "./utils.js";
-import { fetchText } from "./net.js";
-// Shared with the main-process live hub so the two lists can never drift.
+import { $, esc, safeHref } from "./utils.js";
+import { recordEvents } from "./event-store.js";
+// Shared with the main-process owner of the news feeds so the names in the FEED STATUS panel cannot drift.
 import NEWS_SOURCES from "./news-sources.json" with { type: "json" };
 
 const ALL_SOURCES = NEWS_SOURCES;
-
-/** Run `fn` over `items` with a bounded number of in-flight requests. */
-async function mapLimit(items, limit, fn) {
-  const out = new Array(items.length);
-  let next = 0;
-  const workers = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i], i);
-    }
-  });
-  await Promise.all(workers);
-  return out;
-}
 
 let headlines = [];
 let fetchedOnce = false;
@@ -38,23 +24,6 @@ function relAge(ts) {
   const h = Math.floor(mins / 60);
   if (h < 24) return h + "h";
   return Math.floor(h / 24) + "d";
-}
-
-export async function fetchNews() {
-  // Fetched in parallel with a small concurrency cap — the old sequential
-  // loop would need minutes for the full source list.
-  const parts = await mapLimit(ALL_SOURCES, 8, async (src) => {
-    try {
-      const xml = await fetchText("news:" + src.name, src.url, { timeout: 15000 });
-      return parseFeed(xml, src);
-    } catch { return []; } // source down → skip
-  });
-  const out = parts.flat();
-  headlines = out.length ? out.sort((a, b) => b.time - a.time).slice(0, 40) : [];
-  fetchedOnce = true;
-  renderNews();
-  renderTopSignals();
-  return headlines;
 }
 
 /** Number of sources wired up, for the boot log. */
@@ -87,6 +56,7 @@ function entryUrl(node) {
 function parseFeed(xml, src) {
   const sourceName = typeof src === "string" ? src : src.name;
   const kind = typeof src === "string" ? "rss" : src.kind || "rss";
+  const feedUrl = typeof src === "string" ? "" : src.url || "";
   const doc = new DOMParser().parseFromString(xml, "text/xml");
   const nodes = [...doc.querySelectorAll("item"), ...doc.querySelectorAll("entry")];
   return nodes.map(it => ({
@@ -94,8 +64,16 @@ function parseFeed(xml, src) {
     url: kind === "video" ? entryUrl(it) : textOf(it, "link") || entryUrl(it),
     source: sourceName,
     kind,
-    time: Date.parse(textOf(it, "pubDate", "published", "updated", "dc:date")) || Date.now()
+    feedUrl,
+    // No publication date is a real state. The UI says "time not reported"
+    // instead of making an old story look like it happened at poll time.
+    time: Date.parse(textOf(it, "pubDate", "published", "updated", "dc:date")) || null
   })).filter(it => it.title);
+}
+
+/** Cached headlines for the country brief and palette (no network). */
+export function getHeadlines() {
+  return headlines.slice();
 }
 
 /** Main-process push: array of { name, text } RSS/Atom payloads. */
@@ -106,12 +84,24 @@ export function applyLiveNews(parts) {
     if (p && p.text) {
       // Atom payloads (<entry>) come from the YouTube upload feeds.
       const isVideo = /youtube\.com\/feeds/.test(p.url || "") || /<entry[\s>]/.test(p.text);
-      out.push(...parseFeed(p.text, { name: p.name || "?", kind: isVideo ? "video" : "rss" }));
+      out.push(...parseFeed(p.text, { name: p.name || "?", kind: isVideo ? "video" : "rss", url: p.url || "" }));
     }
   }
   if (!out.length) return;
-  headlines = out.sort((a, b) => b.time - a.time).slice(0, 40);
+  headlines = out.sort((a, b) => (b.time || 0) - (a.time || 0)).slice(0, 40);
   fetchedOnce = true;
+  recordEvents(headlines.map(item => ({
+    category: "NEWS",
+    severity: "info",
+    title: item.title,
+    summary: item.kind === "video" ? "Video report" : "News headline",
+    url: item.url,
+    source: item.source,
+    sourceUrl: item.feedUrl,
+    eventTime: item.time,
+    externalId: item.url || item.title,
+    quality: "media"
+  })));
   renderNews();
   renderTopSignals();
 }
@@ -126,7 +116,7 @@ export function renderNews() {
   let html = "";
   for (const it of headlines.slice(0, 12)) {
     const mark = it.kind === "video" ? "▶ " : "";
-    html += '<span><span class="news-dot"></span><a href="' + it.url + '" target="_blank" rel="noopener">' +
+    html += '<span><span class="news-dot"></span><a href="' + safeHref(it.url) + '" target="_blank" rel="noopener">' +
       mark + esc(it.title) + "</a><span class='news-src'>" + esc(it.source || "") + "</span></span>";
   }
   el.innerHTML = html + html;
@@ -143,13 +133,17 @@ export function renderTopSignals() {
   for (const h of headlines.slice(0, 8)) {
     const src = (h.kind === "video" ? "▶ " : "") + h.source;
     html += '<div class="signal-row"><span class="signal-src">' + esc(src) + "</span>" +
-      '<span class="signal-title"><a href="' + h.url + '" target="_blank" rel="noopener">' + esc(h.title) + "</a></span>" +
+      '<span class="signal-title"><a href="' + safeHref(h.url) + '" target="_blank" rel="noopener">' + esc(h.title) + "</a></span>" +
       '<span class="signal-age">' + relAge(h.time) + "</span></div>";
   }
   el.innerHTML = html;
 }
 
 export function initNews() {
-  fetchNews();
-  setInterval(fetchNews, 5 * 60 * 1000); // fallback when live hub is off
+  /* The main process owns the news feeds and pushes them over `monitor:live` (applyLiveNews above). The page
+     used to fetch all 39 sources itself every five minutes as well, so every feed was downloaded twice — and
+     "duplicated for safety" is just a second source of truth. The ticker shows "Loading top signals…" until
+     the owner's first push arrives. */
+  renderTopSignals();
+  renderNews();
 }

@@ -353,6 +353,42 @@ app.whenReady().then(async () => {
     }
 
     /* ---- 7. the other windows open and close --------------------------- */
+    /* The hidden trigger: typed in the composer it opens exactly one workspace window, clears the box and is
+       never stored as a message. Built from two pieces so this test file does not spell the trigger out. */
+    const trigger = "/" + "world";
+    const beforeRows = await main.webContents.executeJavaScript("document.querySelectorAll('.msg-row').length");
+    const typed = await main.webContents.executeJavaScript(`(async () => {
+      const input = document.getElementById("messageInput");
+      input.focus();
+      input.value = ${JSON.stringify(trigger)};
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      await new Promise(r => setTimeout(r, 600));
+      return { value: input.value, rows: document.querySelectorAll(".msg-row").length };
+    })()`);
+    const triggered = await waitFor(findMonitor, 30);
+    const monitorCount = windowUrls().filter(u => u.includes("monitor.html")).length;
+    const stored = (() => {
+      try { return JSON.stringify(JSON.parse(fs.readFileSync(path.join(USER_DATA, "messages.json"), "utf8")).messages || []); }
+      catch { return ""; }
+    })();
+    check("the hidden trigger opens exactly one workspace window and leaves no message",
+      !!triggered && monitorCount === 1 && typed.value === "" && typed.rows === beforeRows && !stored.includes(trigger),
+      { monitorCount, typed, beforeRows, storedTrigger: stored.includes(trigger) });
+    if (triggered) {
+      /* The workspace renders untrusted headlines, so it must not have the chat bridge and must not be able to
+         open the microphone. Denial happens before the device is touched. */
+      const guard = await triggered.webContents.executeJavaScript(`(async () => ({
+        chatBridge: typeof window.api,
+        nodeRequire: typeof window.require,
+        microphone: await navigator.mediaDevices.getUserMedia({ audio: true }).then(() => false).catch(() => true)
+      }))()`);
+      check("the hidden workspace has no chat bridge, no Node and no microphone",
+        guard.chatBridge === "undefined" && guard.nodeRequire === "undefined" && guard.microphone === true, guard);
+      ipcMain.emit("monitor:close");
+      for (let i = 0; i < 25 && findMonitor(); i++) await wait(150);
+    }
+
     ipcMain.emit("monitor:open");
     const mon = await waitFor(findMonitor, 30);
     check("the fullscreen monitor window opens", !!mon);

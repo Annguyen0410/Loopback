@@ -12,9 +12,13 @@ import { renderConvList } from "./sidebar.js";
 export function findMsg(id) { return state.messages.find(m => m.id === id); }
 
 export function save() {
-  // Persist to disk and replay into every other open window (realtime sync).
-  if (window.api.broadcastState) window.api.broadcastState(state);
-  return window.api.save(state);
+  // Persist through the single writer in main, which also replays the saved state into every other open
+  // window. The revision it returns is what makes a save from a stale window unable to drop a quick note
+  // captured while that window was hidden — so it is kept on the shared state and sent with the next save.
+  return window.api.save(state).then(result => {
+    if (result && result.ok && Number.isFinite(result.rev)) state.__rev = result.rev;
+    return result;
+  });
 }
 
 /** Drop every message in the active chat plus its stored files. */

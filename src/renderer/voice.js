@@ -87,7 +87,8 @@ export function initVoice() {
         reader.onloadend = async () => {
           if (!window.api.saveVoice) { toast("Voice saving unavailable"); return; }
           const file = await window.api.saveVoice(reader.result);
-          if (file) await addMessage("", [file]);
+          if (file && file.storedName) await addMessage("", [file]);
+          else if (file && file.error) toast("Could not save the voice note (" + file.error + ")");
         };
         reader.readAsDataURL(blob);
       };

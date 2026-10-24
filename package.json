@@ -1,13 +1,14 @@
 {
   "name": "messenger-self-chat",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Electron desktop app — a private chat with yourself: notes, voice notes, screenshots, plus a world monitor.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
     "build": "electron-builder",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "test": "node --test \"tests/*.test.js\" \"tests/*.test.mjs\""
   },
   "build": {
     "appId": "com.loopback.desktop",
@@ -39,10 +40,15 @@
       "buildResources": "assets"
     },
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         "nsis",
         "portable"
       ]
+    },
+    "portable": {
+      "unpackDirName": "loopback-portable",
+      "useZip": true
     },
     "nsis": {
       "oneClick": false,

@@ -5,7 +5,6 @@
  */
 
 import { $, esc } from "./utils.js";
-import { api } from "./bridge.js";
 
 let cached = [];
 
@@ -35,16 +34,6 @@ function formatPrice(v) {
   return v.toFixed(4);
 }
 
-export async function fetchMarkets() {
-  try {
-    if (!api || !api.fetchIndices) return;
-    const data = await api.fetchIndices();
-    if (data && data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result.length) {
-      renderMarkets(data.quoteResponse.result);
-    }
-  } catch { /* silent — ticker just stays empty */ }
-}
-
 /** Main-process push (monitor:live type=indices). */
 export function applyLiveMarkets(payload) {
   const result = payload && payload.quoteResponse && payload.quoteResponse.result;
@@ -52,6 +41,7 @@ export function applyLiveMarkets(payload) {
 }
 
 export function initMarkets() {
-  fetchMarkets();
-  setInterval(fetchMarkets, 2 * 60 * 1000); // fallback when live hub is off
+  /* Indices are fetched by the main process (one owner) and arrive as `indices` pushes. This used to poll
+     monitor:indices every two minutes on its own, on top of main's 30-second loop. */
+  renderMarkets(cached);
 }

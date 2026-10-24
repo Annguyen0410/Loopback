@@ -18,6 +18,13 @@
  */
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
+
+// Never let a test write into the real Monitor preferences. `app.setPath`
+// must run before `whenReady`, which is why it sits at module scope.
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), "loopback-monitortest-"));
+app.setPath("userData", profile);
 
 let PASS = 0, FAIL = 0;
 function ok(cond, name, extra) {
@@ -93,6 +100,14 @@ app.whenReady().then(async () => {
     const r = await j(`(async () => {
       const m = await import("./src/monitor/finance.js");
       m.renderFinanceTab();
+      /* Quotes arrive as a PUSH from the single owner in main — the tab no longer fetches indices itself. */
+      m.applyLiveIndices({ quoteResponse: { result: [
+        { symbol: "^GSPC", regularMarketPrice: 5000.12, regularMarketChangePercent: 0.5 },
+        { symbol: "^TNX", regularMarketPrice: 44.2, regularMarketChangePercent: -0.3 },
+        { symbol: "2YY=F", regularMarketPrice: 4.42, regularMarketChangePercent: 0.1 },
+        { symbol: "GC=F", regularMarketPrice: 2400.5, regularMarketChangePercent: -0.2 },
+        { symbol: "EURUSD=X", regularMarketPrice: 1.0842, regularMarketChangePercent: 0.15 }
+      ] } });
       await new Promise(r => setTimeout(r, 4000)); // crypto hits the real API
       return {
         stocks: document.getElementById("finStocks").textContent,
@@ -229,14 +244,125 @@ app.whenReady().then(async () => {
     ok(/\[WARN\]/i.test(r.line) && r.line.includes("UTC check"), "message rendered with level", r.line);
   });
 
-  /* 8 — live hub main-process polling exists for news/quakes/indices. */
-  test("main live hub: news/quakes/indices poll loops wired in main.js", async () => {
+  /* 8 — one owner per feed. Main owns news/quakes/indices, the page owns the rest; neither polls the other's
+     feeds, and the cadence is tied to how often each source changes (it used to be 20-30 s everywhere). */
+  test("one owner per feed, with cadences tied to the source", async () => {
     const fs = require("fs");
-    const src = fs.readFileSync(path.join(__dirname, "main.js"), "utf8");
-    ok(/tick\("news",\s*pollLiveNews,\s*30 \* 1000/.test(src), "news polled every 30s in main", null);
-    ok(/tick\("quakes",\s*pollLiveQuakes,\s*20 \* 1000/.test(src), "quakes polled every 20s in main", null);
-    ok(/tick\("indices",\s*pollLiveIndices,\s*30 \* 1000/.test(src), "indices polled every 30s in main", null);
-    ok(src.includes("gamma-api.polymarket.com"), "proxy allowlist has polymarket host", null);
+    const mainSrc = fs.readFileSync(path.join(__dirname, "main.js"), "utf8");
+    const newsSrc = fs.readFileSync(path.join(__dirname, "src", "monitor", "news.js"), "utf8");
+    const marketsSrc = fs.readFileSync(path.join(__dirname, "src", "monitor", "markets.js"), "utf8");
+    const quakesSrc = fs.readFileSync(path.join(__dirname, "src", "monitor", "quakes.js"), "utf8");
+    const { FEED_CADENCE } = require("./src/main/monitor-scheduler.js");
+    ok(/createMonitorScheduler/.test(mainSrc), "main runs the single-owner scheduler", null);
+    ok(FEED_CADENCE.news >= 5 * 60 * 1000, "news cadence is minutes, not 30 s", FEED_CADENCE.news);
+    ok(FEED_CADENCE.quakes >= 2 * 60 * 1000, "quakes cadence is not 20 s", FEED_CADENCE.quakes);
+    ok(FEED_CADENCE.indices >= 2 * 60 * 1000, "indices cadence is not 30 s", FEED_CADENCE.indices);
+    ok(!/setInterval\(fetchNews/.test(newsSrc), "the page does not poll news as well", null);
+    ok(!/setInterval\(fetchMarkets/.test(marketsSrc), "the page does not poll indices as well", null);
+    ok(!/setInterval\(.*fetchQuakes/.test(quakesSrc), "the page does not poll quakes as well", null);
+    ok(!/pushMonitor\("refresh"/.test(mainSrc), "no duplicate refresh signals from main", null);
+    ok(/gamma-api\.polymarket\.com/.test(fs.readFileSync(path.join(__dirname, "src", "main", "monitor-proxy.js"), "utf8")),
+      "proxy allowlist has polymarket host", null);
+  });
+
+  /* 9 — normalized event timeline + search + country brief + watch + trends. */
+  test("event timeline: dedupe, filters, details and map centering", async () => {
+    const r = await j(`(async () => {
+      const s = await import("./src/monitor/event-store.js");
+      s.clearEvents();
+      const now = Date.now();
+      s.recordEvents([
+        { category: "QUAKE", severity: "crit", title: "M 6.6 — Timeline test quake", source: "USGS",
+          externalId: "timeline-quake", eventTime: now - 60000, observedAt: now - 60000, lat: 23.7, lng: 121, country: "Taiwan", value: 6.6 },
+        { category: "FLOOD", severity: "warn", title: "Timeline test flood", source: "GDACS",
+          externalId: "timeline-flood", eventTime: now - 120000, observedAt: now - 120000, country: "Vietnam" },
+        { category: "QUAKE", severity: "crit", title: "M 6.6 — Timeline test quake", source: "USGS",
+          externalId: "timeline-quake", eventTime: now - 60000, observedAt: now - 30000, lat: 23.7, lng: 121, country: "Taiwan", value: 6.6 }
+      ]);
+      const v = await import("./src/monitor/event-view.js");
+      v.focusEvent(s.getEvents({ categories: ["QUAKE"], limit: 10 })[0].id);
+      const rows = document.querySelectorAll("#evList .evt-row").length;
+      const detail = document.getElementById("evDetail").textContent;
+      const count = s.getEvents({ limit: 20 }).length;
+      return { count, rows, detail, selected: document.querySelectorAll("#evList .evt-row.selected").length };
+    })()`);
+    ok(r.count === 2, "a repeated poll is one stored event", r.count);
+    ok(r.rows === 2 && r.selected === 1, "timeline renders and selects the event", r);
+    ok(/Timeline test quake/.test(r.detail) && /USGS/.test(r.detail) && /23\.70/.test(r.detail), "detail includes title, source and coordinates", r.detail);
+  });
+
+  test("command palette searches cached events and opens one", async () => {
+    const r = await j(`(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
+      const input = document.getElementById("paletteInput");
+      input.value = "Timeline test quake";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      const rows = [...document.querySelectorAll("#paletteResults .palette-item")].map(row => row.textContent);
+      return { open: !document.getElementById("palette").hidden, rows };
+    })()`);
+    ok(r.open, "palette opened with Ctrl+K");
+    ok(r.rows.some(row => /Timeline test quake/.test(row) && /event/i.test(row)), "event is searchable from the palette", r.rows);
+  });
+
+  test("country brief joins the static profile to matching live evidence", async () => {
+    const r = await j(`(async () => {
+      const c = await import("./src/monitor/country-risk.js");
+      c.showRiskDetail("TW");
+      const text = document.getElementById("riskModalBrief").textContent;
+      return { text, modal: document.getElementById("riskModal").style.display };
+    })()`);
+    ok(r.modal === "flex", "country modal opens");
+    ok(/COUNTRY BRIEF/.test(r.text) && /Timeline test quake/.test(r.text), "brief shows the matching event", r.text.slice(0, 180));
+    ok(/STATIC PROFILE/.test(r.text) && /not a real\-time measurement/.test(r.text), "static scores stay explicitly labelled");
+    ok(/DATA COVERAGE/.test(r.text), "coverage gaps are visible");
+  });
+
+  test("watchlist saves a rule, matches a new event and respects the cooldown", async () => {
+    const r = await j(`(async () => {
+      const s = await import("./src/monitor/event-store.js");
+      const w = await import("./src/monitor/watchlist.js");
+      document.querySelector('.sb-tab[data-tab="watch"]').click();
+      document.getElementById("watchKind").value = "keyword";
+      document.getElementById("watchValue").value = "Watchtest";
+      document.getElementById("watchSound").checked = false;
+      document.getElementById("watchNotify").checked = false;
+      document.getElementById("watchAdd").click();
+      const rules = JSON.parse(localStorage.getItem("wm_watch_rules_v2") || "[]");
+      const now = Date.now();
+      s.recordEvent({ category: "NEWS", severity: "warn", title: "Watchtest alert from a feed", source: "Wire Test", externalId: "watch-1", eventTime: now, observedAt: now });
+      await new Promise(resolve => setTimeout(resolve, 120));
+      const history = JSON.parse(localStorage.getItem("wm_watch_history_v2") || "[]");
+      return {
+        rules: rules.length,
+        rule: rules[0] && rules[0].value,
+        history: history.length,
+        text: document.getElementById("watchHistory").textContent
+      };
+    })()`);
+    ok(r.rules === 1 && r.rule === "Watchtest", "rule persisted", r);
+    ok(r.history >= 1 && /Watchtest alert/.test(r.text), "new matching event recorded in history", r);
+  });
+
+  test("source health shows last success and the failure, and trends stay cross-source", async () => {
+    const r = await j(`(async () => {
+      const n = await import("./src/monitor/net.js");
+      n.noteFeedStatus({ feed: "healthtest", status: "STALE", lastOk: Date.now() - 120000, lastErr: "timeout", lastAttempt: Date.now(), failures: 2 });
+      n.renderFeedStatus();
+      const row = [...document.querySelectorAll("#feedStatusList .fs-row")].find(el => /healthtest/.test(el.textContent));
+      const s = await import("./src/monitor/event-store.js");
+      const now = Date.now();
+      s.recordEvents([
+        { category: "NEWS", title: "Trendtest port closure reported", source: "Wire A", externalId: "trend-a", url: "https://example.com/a", eventTime: now - 60000, observedAt: now - 60000 },
+        { category: "NEWS", title: "Trendtest port closure continues", source: "Wire B", externalId: "trend-b", url: "https://example.com/b", eventTime: now - 120000, observedAt: now - 120000 },
+        { category: "NEWS", title: "Trendtest port union statement", source: "Wire C", externalId: "trend-c", url: "https://example.com/c", eventTime: now - 180000, observedAt: now - 180000 }
+      ]);
+      const t = await import("./src/monitor/trending.js");
+      t.renderTrending();
+      return { row: row ? row.textContent : "", title: row ? row.title : "", trends: document.getElementById("trendList").textContent };
+    })()`);
+    ok(/stale/.test(r.row) && /ok 2m/.test(r.row), "feed row shows stale + last-success age", r.row);
+    ok(/last success 2m ago/.test(r.title) && /last error: timeout/.test(r.title), "tooltip carries last success and error", r.title);
+    ok(/trendtest/.test(r.trends.toLowerCase()) && /3 sources/.test(r.trends), "trend requires and reports cross-source volume", r.trends);
   });
 
   /* run everything sequentially */
@@ -247,5 +373,6 @@ app.whenReady().then(async () => {
   }
   console.log("\n== RESULT " + PASS + " passed, " + FAIL + " failed ==");
   console.log("CONSOLE-ERRORS " + JSON.stringify(consoleErrors));
+  try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* Windows may still hold a cache file */ }
   app.exit(FAIL > 0 || consoleErrors.length > 0 ? 1 : 0);
 });

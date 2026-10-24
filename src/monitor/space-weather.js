@@ -64,7 +64,6 @@ function setVal(id, txt) {
   if (el) el.textContent = txt;
 }
 
-export function initSpaceWeather() {
-  fetchSpaceWeather();
-  setInterval(fetchSpaceWeather, 15 * 60 * 1000);
-}
+/* No self-scheduling export here: monitor/main.js owns the cadence (10 min in the poll loop). A second
+   `initSpaceWeather` with its own 15-minute timer was never called, and existed only as a way to add a third
+   cadence by accident. */

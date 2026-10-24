@@ -1,14 +1,42 @@
-﻿const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Notification, nativeTheme, net, nativeImage, session, screen, globalShortcut, desktopCapturer, powerSaveBlocker, Tray, Menu, clipboard } = require("electron");
+﻿const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Notification, nativeTheme, net, nativeImage, session, screen, globalShortcut, desktopCapturer, powerSaveBlocker, powerMonitor, Tray, Menu, clipboard } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const https = require("https");
 const os = require("os");
 const { Readable } = require("stream");
+const portableJanitor = require("./src/main/portable-janitor.js");
+const atomic = require("./src/main/atomic-write.js");
+const store = require("./src/main/store.js");
+const storeMigrations = require("./src/main/store-migrations.js");
+const { installIpcGuard, pageRole, roleForUrl, permissionAllowed } = require("./src/main/ipc-policy.js");
+const { externalUrl, isAppPage } = require("./src/main/security.js");
+const { createMonitorProxy } = require("./src/main/monitor-proxy.js");
+const { createMonitorScheduler } = require("./src/main/monitor-scheduler.js");
 
 protocol.registerSchemesAsPrivileged([
   { scheme: "local-file", privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }
 ]);
+
+/* Chromium brings up background services this app never asks for — the Cast media router, the global media
+   controls, the translate and autofill-infrastructure clients, the reading-mode model. Each one is a helper
+   process, a thread or a background download, and they start before any of Loopback's own code runs, so the
+   switch has to be set here, before `app.whenReady()`. `CalculateNativeWinOcclusion` is in the list on
+   purpose: it exists to tell Chromium when a window is covered, which costs a per-window timer, and this app
+   keeps an always-on-top bubble that is overlapped by definition. Nothing Loopback does depends on any of
+   them — the windows that need to keep running set `backgroundThrottling` themselves. */
+app.commandLine.appendSwitch('disable-features', [
+  'MediaRouter',
+  'GlobalMediaControls',
+  'HardwareMediaKeyHandling',
+  'CalculateNativeWinOcclusion',
+  'Translate',
+  'AutofillServerCommunication',
+  'OptimizationGuideModelDownloading',
+  'InterestFeedContentSuggestions',
+  'ReadAnything',
+  'SpareRendererForSitePerProcess'
+].join(','));
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) { app.quit(); }
@@ -137,25 +165,59 @@ const QUICK_ACCEL = "CommandOrControl+Alt+N"; // global "new note" hotkey
 const QUICK_SIZE = { w: 580, h: 212 };
 const APP_ICON = path.join(__dirname, "assets", "icon.png");
 
+/* Every payload that crosses the bridge has a ceiling. Without one, a bug in a renderer (or a page that got
+   in) could ask the main process to allocate and write an unbounded buffer. The numbers are generous for the
+   feature they belong to: a pasted image, a voice note and a screen recording all fit comfortably. */
+const MAX_NOTE_CHARS = 100 * 1000;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_VOICE_BYTES = 25 * 1024 * 1024;
+const MAX_CAPTURE_BYTES = 64 * 1024 * 1024;
+const CAPTURE_EXT = /\.(png|jpg|jpeg|webp|webm|mp4|mov)$/i;
+
+/** Decodes a base64 data URL with a hard byte cap. Returns `{ buf, mime }` or `{ error }`. */
+function bufferFromDataUrl(raw, maxBytes) {
+  if (typeof raw !== "string" || !/^data:/i.test(raw)) return { error: "bad-data" };
+  const comma = raw.indexOf(",");
+  if (comma < 0) return { error: "bad-data" };
+  const meta = raw.slice(5, comma);
+  if (!/;base64/i.test(meta)) return { error: "bad-data" };
+  const b64 = raw.slice(comma + 1);
+  if (b64.length > Math.ceil(maxBytes / 3) * 4 + 16) return { error: "too-large" };
+  let buf;
+  try { buf = Buffer.from(b64, "base64"); } catch { return { error: "bad-data" }; }
+  if (!buf.length) return { error: "empty" };
+  if (buf.length > maxBytes) return { error: "too-large" };
+  const mime = (meta.match(/^([a-z0-9.+-]+\/[a-z0-9.+-]+)/i) || [])[1] || "application/octet-stream";
+  return { buf, mime };
+}
+
 function ensure() {
   fs.mkdirSync(FDIR(), { recursive: true });
   fs.mkdirSync(VDIR(), { recursive: true });
   fs.mkdirSync(CAPDIR(), { recursive: true });
 }
 
+/* The chat and the settings are the two files worth protecting: both go through src/main/atomic-write.js,
+   which writes a temporary file, keeps the previous version as .bak and then renames it over the target. A
+   save interrupted by a crash or a full disk can no longer leave half a JSON document behind — and if one is
+   ever found, the reader takes the backup and puts it back rather than the app starting with an empty chat. */
+/* The chat has exactly one owner in this process now (src/main/store.js): it keeps the current document, the
+   revision, and the only writer. `loadJSON()` keeps its old meaning for the code here that reads the live
+   document; writes go through the store so a quick note and a window save can no longer overwrite each
+   other, and a large history is written off the main thread. */
+let chatStore = null;
 function loadJSON() {
-  try { return JSON.parse(fs.readFileSync(DATA(), "utf8")); } catch { return { messages: [] }; }
+  return chatStore ? chatStore.read() : { messages: [] };
 }
-function saveJSON(d) {
-  fs.mkdirSync(path.dirname(DATA()), { recursive: true });
-  fs.writeFileSync(DATA(), JSON.stringify(d || { messages: [] }), "utf8");
+/* What a window receives: the document plus the revision it must send back with its next save. */
+function storeSnapshot() {
+  return chatStore ? { ...chatStore.read(), __rev: chatStore.rev() } : { messages: [], __rev: 0 };
 }
 function loadCfg() {
-  try { return JSON.parse(fs.readFileSync(SETTINGS(), "utf8")); } catch { return { darkMode: false, theme: "blue" }; }
+  return atomic.readJsonSync(SETTINGS(), { darkMode: false, theme: "blue" });
 }
 function saveCfg(d) {
-  fs.mkdirSync(path.dirname(SETTINGS()), { recursive: true });
-  fs.writeFileSync(SETTINGS(), JSON.stringify(d), "utf8");
+  atomic.writeFileAtomicSync(SETTINGS(), JSON.stringify(d));
 }
 
 function safeFile(name, dirFn) {
@@ -288,7 +350,7 @@ function openShotReview(name) {
       show: false, title: "Screenshot", icon: APP_ICON, backgroundColor: "#00000000",
       webPreferences: {
         preload: path.join(__dirname, "review-preload.js"),
-        contextIsolation: true, nodeIntegration: false, sandbox: false
+        contextIsolation: true, nodeIntegration: false, sandbox: true
       }
     });
     /* Deliberately NOT content-protected: on Windows a protected transparent
@@ -366,31 +428,35 @@ function deleteStored(storedName) {
  */
 let quickWin = null;
 
-function appendQuickNote(text, chatId) {
+async function appendQuickNote(text, chatId) {
   const clean = String(text || "").trim();
   if (!clean) return { ok: false, error: "empty" };
+  if (clean.length > MAX_NOTE_CHARS) return { ok: false, error: "too-long" };
+  if (!chatStore) return { ok: false, error: "not-ready" };
   const data = loadJSON();
-  if (!Array.isArray(data.messages)) data.messages = [];
-  if (!Array.isArray(data.chats) || !data.chats.length) {
-    data.chats = [{ id: crypto.randomUUID(), name: "Notes to Self", pinned: true, createdAt: Date.now() - 3000 }];
-    for (const m of data.messages) if (!m.chatId) m.chatId = data.chats[0].id;
+  let seededChat = null;
+  if (!data.chats.length) {
+    seededChat = { id: crypto.randomUUID(), name: "Notes to Self", pinned: true, createdAt: Date.now() - 3000 };
   }
   const cfg = loadQuickCfg();
   const chat = data.chats.find(c => c.id === chatId)
     || data.chats.find(c => c.id === cfg.lastChatId)
     || data.chats.find(c => c.id === data.activeChatId)
-    || data.chats[0];
+    || data.chats[0]
+    || seededChat;
+  if (!chat) return { ok: false, error: "no-chat" };
   const msg = {
     id: crypto.randomUUID(), chatId: chat.id, text: clean, files: [], createdAt: Date.now(),
     read: true, reactions: {}, pinned: false, edited: false
   };
-  data.messages.push(msg);
-  saveJSON(data);
+  const saved = await chatStore.appendMessage(msg, { chat: seededChat });
+  if (!saved.ok) return saved;
   saveQuickCfg({ lastChatId: chat.id });
+  const snapshot = storeSnapshot();
   BrowserWindow.getAllWindows().forEach(w => {
-    if (w !== quickWin && !w.isDestroyed()) w.webContents.send("state:changed", data);
+    if (w !== quickWin && !w.isDestroyed()) w.webContents.send("state:changed", snapshot);
   });
-  return { ok: true, chatId: chat.id, chatName: chat.name, message: msg };
+  return { ok: true, chatId: chat.id, chatName: chat.name, message: msg, rev: saved.rev };
 }
 
 function openQuickNote() {
@@ -412,7 +478,7 @@ function openQuickNote() {
     backgroundColor: loadCfg().darkMode ? "#1c1e21" : "#f0f2f5",
     webPreferences: {
       preload: path.join(__dirname, "quick-preload.js"),
-      contextIsolation: true, nodeIntegration: false, sandbox: false, spellcheck: false
+      contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false
     }
   });
   quickWin.setAlwaysOnTop(true, "floating");
@@ -449,8 +515,29 @@ function registerQuickShortcut() {
 }
 
 function registerHandlers() {
-  ipcMain.handle("store:load", () => { try { return loadJSON(); } catch { return { messages: [] }; } });
-  ipcMain.handle("store:save", (_, d) => { try { saveJSON(d); return { ok: true }; } catch { return { ok: false }; } });
+  /* Every handler registered below is now sender-checked: only the main frame of one of the app's own pages
+     may call it, and only the roles listed for that channel in src/main/ipc-policy.js. The check is installed
+     BEFORE the registrations so no channel can be added later and forget it. */
+  installIpcGuard(ipcMain, wc => pageRole(wc, __dirname), (channel, role, url) => {
+    console.warn("[Main] IPC denied:", channel, "from", role || "untrusted", (url || "").slice(0, 120));
+  });
+
+  ipcMain.handle("store:load", () => { try { return storeSnapshot(); } catch { return { messages: [], __rev: 0 }; } });
+  ipcMain.handle("store:save", async (e, d) => {
+    if (!chatStore) return { ok: false, error: "not-ready" };
+    const result = await chatStore.saveFromRenderer(d);
+    /* The authoritative revision goes back to the saver, and every other window gets the same document so
+       their next save cannot be based on a revision that no longer exists. The sender is skipped: it just
+       wrote this state and does not need a full re-render (and a lost scroll position) as an answer. */
+    if (result.ok) {
+      const snapshot = storeSnapshot();
+      BrowserWindow.getAllWindows().forEach(w => {
+        if (w.isDestroyed() || w.webContents === e.sender) return;
+        try { w.webContents.send("state:changed", snapshot); } catch {}
+      });
+    }
+    return result;
+  });
   ipcMain.handle("settings:load", () => { try { return loadCfg(); } catch { return { darkMode: false, theme: "blue" }; } });
   ipcMain.handle("settings:save", (_, d) => {
     try {
@@ -474,18 +561,18 @@ function registerHandlers() {
     } catch { return []; }
   });
 
-  ipcMain.handle("file:savePasted", (_, { name, dataUrl }) => {
+  ipcMain.handle("file:savePasted", (_, { name, dataUrl } = {}) => {
     try {
       ensure();
-      const b64 = String(dataUrl || "").split(",")[1];
-      if (!b64) return null;
-      const buf = Buffer.from(b64, "base64");
-      const ext = ({ "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp" })[(dataUrl.match(/^data:([^;,]+)/) || [])[1]] || ".png";
+      const decoded = bufferFromDataUrl(dataUrl, MAX_IMAGE_BYTES);
+      if (decoded.error) return { error: decoded.error };
+      const buf = decoded.buf;
+      const ext = ({ "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp" })[decoded.mime] || ".png";
       const sn = crypto.randomUUID() + ext;
       fs.writeFileSync(path.join(FDIR(), sn), buf);
       const mime = "image/" + ext.slice(1);
       return { name: String(name || "pasted-image") + ext, storedName: sn, size: buf.length, mime, category: "image" };
-    } catch { return null; }
+    } catch (e) { return { error: String((e && e.message) || e) }; }
   });
 
   ipcMain.handle("store:export", async () => {
@@ -504,6 +591,13 @@ function registerHandlers() {
 
   ipcMain.handle("app:openDataFolder", () => {
     try { shell.openPath(app.getPath("userData")); } catch {}
+  });
+
+  // Opens Facebook's Messenger site. The address is fixed here, never taken from the page, so a renderer
+  // cannot use this channel to open any other link.
+  ipcMain.handle("app:openMessenger", () => {
+    try { shell.openExternal("https://www.messenger.com/"); return { ok: true }; }
+    catch (err) { return { ok: false, error: String((err && err.message) || err) }; }
   });
 
   // Drag-and-drop: renderer sends absolute paths obtained via webUtils.getPathForFile
@@ -528,13 +622,13 @@ function registerHandlers() {
   ipcMain.handle("file:saveCanvas", (_, dataUrl) => {
     try {
       ensure();
-      const b64 = String(dataUrl || "").split(",")[1];
-      if (!b64) return null;
-      const buf = Buffer.from(b64, "base64");
+      const decoded = bufferFromDataUrl(dataUrl, MAX_IMAGE_BYTES);
+      if (decoded.error) return { error: decoded.error };
+      const buf = decoded.buf;
       const sn = `${crypto.randomUUID()}.png`;
       fs.writeFileSync(path.join(FDIR(), sn), buf);
       return { name: `whiteboard-${Date.now()}.png`, storedName: sn, size: buf.length, mime: "image/png", category: "image" };
-    } catch { return null; }
+    } catch (e) { return { error: String((e && e.message) || e) }; }
   });
 
   ipcMain.handle("file:open", (_, n) => {
@@ -549,13 +643,13 @@ function registerHandlers() {
   ipcMain.handle("voice:save", (_, b64data) => {
     try {
       ensure();
-      const b64 = String(b64data || "").split(",")[1];
-      if (!b64) return null;
-      const buf = Buffer.from(b64, "base64");
+      const decoded = bufferFromDataUrl(b64data, MAX_VOICE_BYTES);
+      if (decoded.error) return { error: decoded.error };
+      const buf = decoded.buf;
       const sn = `${crypto.randomUUID()}.webm`;
       fs.writeFileSync(path.join(VDIR(), sn), buf);
       return { name: `voice-${Date.now()}.webm`, storedName: sn, size: buf.length, mime: "audio/webm", category: "audio" };
-    } catch { return null; }
+    } catch (e) { return { error: String((e && e.message) || e) }; }
   });
 
   /* ---- Quick note popup ---- */
@@ -580,11 +674,11 @@ function registerHandlers() {
     try { if (Notification.isSupported()) new Notification({ title: opts.title || "", body: opts.body || "" }).show(); } catch {}
   });
 
-  ipcMain.handle("image:resize", (_, { dataUrl, maxWidth }) => {
+  ipcMain.handle("image:resize", (_, { dataUrl, maxWidth } = {}) => {
     try {
-      const b64 = String(dataUrl || "").split(",")[1];
-      if (!b64) return null;
-      const img = nativeImage.createFromBuffer(Buffer.from(b64, "base64"));
+      const decoded = bufferFromDataUrl(dataUrl, MAX_IMAGE_BYTES);
+      if (decoded.error) return { error: decoded.error };
+      const img = nativeImage.createFromBuffer(decoded.buf);
       const sz = img.getSize();
       if (!maxWidth || sz.width <= maxWidth) return { dataUrl, width: sz.width, height: sz.height, resized: false };
       const scaled = img.resize({ quality: "good" });
@@ -639,8 +733,12 @@ function registerHandlers() {
         const m = payload.dataUrl.match(/^data:([^;,]+);base64,(.+)$/);
         if (m) buf = Buffer.from(m[2], "base64");
       }
+      if (buf && buf.length > MAX_CAPTURE_BYTES) return { ok: false, error: "too-large" };
       if (!buf || !buf.length) return { ok: false, error: "empty" };
-      const clean = String(name || "").replace(/[\/\\]/g, "_").replace(/\.\./g, "_") || `cap-${captureStamp()}`;
+      const clean = String(name || "").replace(/[\/\\]/g, "_").replace(/\.\./g, "_") || `cap-${captureStamp()}.webm`;
+      // A capture is an image or a recording, and its name must say which: the media library, the player and
+      // mimeOf() all decide by extension.
+      if (!CAPTURE_EXT.test(clean)) return { ok: false, error: "bad-extension" };
       fs.writeFileSync(path.join(CAPDIR(), clean), buf);
       return { ok: true, name: clean };
     } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
@@ -736,6 +834,7 @@ function registerHandlers() {
     const note = String((payload && payload.note) || "").trim();
     let bytes = null;
     if (payload && payload.buffer) { try { bytes = Buffer.from(payload.buffer); } catch { bytes = null; } }
+    if (bytes && bytes.length > MAX_CAPTURE_BYTES) return { ok: false, error: "too-large" };
     if (note && (!bytes || !bytes.length)) return { ok: false, error: "empty" };
     if (!note && !reviewBase) return { ok: false, error: "no original" };
     try {
@@ -905,7 +1004,7 @@ function registerHandlers() {
         backgroundColor: "#000000",
         webPreferences: {
           preload: path.join(__dirname, "shot-preload.js"),
-          contextIsolation: true, nodeIntegration: false, sandbox: false
+          contextIsolation: true, nodeIntegration: false, sandbox: true
         }
       });
       overlayUp = true;
@@ -1040,7 +1139,7 @@ function registerHandlers() {
       hasShadow: false, backgroundColor: "#00000000", icon: APP_ICON,
       webPreferences: {
         preload: path.join(__dirname, "cam-preload.js"),
-        contextIsolation: true, nodeIntegration: false, sandbox: false,
+        contextIsolation: true, nodeIntegration: false, sandbox: true,
         spellcheck: false, backgroundThrottling: false
       }
     });
@@ -1224,15 +1323,6 @@ function registerHandlers() {
     if (isShotPicker(w)) showShotPicker(w);
   });
 
-  /* World Monitor IPC */
-  ipcMain.handle("monitor:quakes", async () => {
-    try {
-      const resp = await net.fetch("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson");
-      if (!resp.ok) return null;
-      return await resp.json();
-    } catch { return null; }
-  });
-
   /* Real host metrics for SYSTEM STATUS / CONNECTED NODES panels.
    * Cached ~1s: sys-status (2s) + net-io (1s) both call this. */
   let prevCpuTimes = null;
@@ -1286,7 +1376,7 @@ function registerHandlers() {
       }
       sysCache = {
         ok: true, cpu, mem, disk, interfaces,
-        proxyRxBytes,
+        proxyRxBytes: monitorProxy.rxBytes(),
         hostname: os.hostname(),
         platform: process.platform,
         uptime: os.uptime()
@@ -1298,95 +1388,27 @@ function registerHandlers() {
     }
   });
 
-  /* --- Generic proxied fetch for no-key public APIs -----------------------
-   * Renderer fetch() to many of these hosts is blocked by CORS. Going
-   * through the main process bypasses CORS entirely. Host allowlist keeps
-   * the proxy from becoming an open relay. */
-  const PROXY_HOSTS = new Set([
-    "earthquake.usgs.gov",
-    "eonet.gsfc.nasa.gov",
-    "opensky-network.org",
-    "api.wheretheiss.at",
-    "celestrak.org", "celestrak.com",
-    "api.coingecko.com",
-    "open.er-api.com",
-    "api.alternative.me",
-    "api.open-meteo.com",
-    "air-quality-api.open-meteo.com",
-    "api.openaq.org",
-    "api.openaq.com",
-    "www.gdacs.org", "gdacs.org",
-    "api.gdeltproject.org",
-    "feeds.bbci.co.uk",
-    "services.swpc.noaa.gov",
-    "api.openaq.org",
-    "api.ioda.inetintel.cc.gatech.edu",
-    "min-api.cryptocompare.com",
-    "query1.finance.yahoo.com", "query2.finance.yahoo.com",
-    "stooq.com", "www.stooq.com",
-    "himawari8.nict.go.jp",
-    "www.aljazeera.com",
-    "www.france24.com",
-    "www.theguardian.com",
-    "www.dw.com",
-    "www.youtube.com",
-    "db.satnogs.org",
-    "feeds.skynews.com",
-    "feeds.npr.org",
-    "feeds.nbcnews.com",
-    "www.cbsnews.com",
-    "www.cbc.ca",
-    "www.abc.net.au",
-    "rss.dw.com",
-    "www.euronews.com",
-    "www.lemonde.fr",
-    "www.haaretz.com",
-    "www.channelnewsasia.com",
-    "www.japantimes.co.jp",
-    "thediplomat.com",
-    "foreignpolicy.com",
-    "www.defensenews.com",
-    "time.com",
-    "vnexpress.net",
-    "tuoitre.vn",
-    "thanhnien.vn",
-    "news.un.org",
-    "www.who.int",
-    "www.submarinecablemap.com",
-    "api.worldbank.org",
-    "marine-api.open-meteo.com",
-    "gamma-api.polymarket.com"
-  ]);
+  /* --- The monitor's only outbound path -----------------------------------
+   * Renderer fetch() to these hosts is blocked by CORS, so main fetches for it. The allowlist and every
+   * other rule (redirects, deadline, body cap, concurrency, cooldowns) live in one reviewed module rather
+   * than inline: src/main/monitor-proxy.js. `proxyRxBytes` for the NETWORK I/O panel comes from there. */
+  const monitorProxy = createMonitorProxy({ fetchImpl: (url, opts) => net.fetch(url, opts) });
 
-  /* Cumulative response bytes through the proxy (NETWORK I/O panel).
-     Declared before monitor:sys uses it. */
-  let proxyRxBytes = 0;
-
-  ipcMain.handle("monitor:proxy", async (_, url) => {
-    try {
-      if (typeof url !== "string" || !url.startsWith("https://")) return { ok: false, error: "bad-url" };
-      const host = new URL(url).hostname.toLowerCase();
-      if (!PROXY_HOSTS.has(host)) return { ok: false, error: "host-not-allowed" };
-      const resp = await net.fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (WorldMonitor)" } });
-      if (!resp.ok) return { ok: false, error: "http-" + resp.status };
-      const ct = resp.headers.get("content-type") || "";
-      if (ct.includes("json")) {
-        const json = await resp.json();
-        try { proxyRxBytes += Buffer.byteLength(JSON.stringify(json)); } catch {}
-        return { ok: true, json };
-      }
-      const text = await resp.text();
-      proxyRxBytes += Buffer.byteLength(text);
-      return { ok: true, text };
-    } catch (e) {
-      return { ok: false, error: String((e && e.message) || e) };
-    }
-  });
+  ipcMain.handle("monitor:proxy", (_, url) => monitorProxy.fetch(url));
 
   /* Yahoo Finance v8 chart — fetched in PARALLEL (no artificial delay). */
-  function yahooQuote(sym) {
+  function yahooQuote(sym, signal) {
     return new Promise((resolve) => {
+      if (signal && signal.aborted) return resolve(null);
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`;
+      let settled = false;
+      let onAbort = null;
+      const done = (value) => {
+        if (settled) return;
+        settled = true;
+        if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      };
       const req = https.get(url, { headers: { "User-Agent": "Mozilla/5.0" } }, (res) => {
         let body = "";
         res.on("data", (c) => (body += c));
@@ -1394,54 +1416,35 @@ function registerHandlers() {
           try {
             const data = JSON.parse(body);
             const meta = data && data.chart && data.chart.result && data.chart.result[0] && data.chart.result[0].meta;
-            if (!meta) return resolve(null);
+            if (!meta) return done(null);
             const prev = meta.previousClose != null ? meta.previousClose : meta.chartPreviousClose;
             const price = meta.regularMarketPrice != null ? meta.regularMarketPrice : prev;
-            if (price == null || prev == null) return resolve(null);
-            resolve({
+            if (price == null || prev == null) return done(null);
+            done({
               symbol: sym,
               regularMarketPrice: price,
               regularMarketChangePercent: prev ? ((price - prev) / prev * 100) : 0,
               marketState: meta.marketState || "CLOSED"
             });
-          } catch { resolve(null); }
+          } catch { done(null); }
         });
       });
-      req.on("error", () => resolve(null));
-      req.setTimeout(9000, () => { req.destroy(); resolve(null); });
+      // A stopped scheduler must not leave 28 sockets waiting for a quote nobody will render.
+      onAbort = () => { try { req.destroy(); } catch {} done(null); };
+      if (signal) signal.addEventListener("abort", onAbort, { once: true });
+      req.on("error", () => done(null));
+      req.setTimeout(9000, () => { try { req.destroy(); } catch {} done(null); });
     });
   }
 
-  ipcMain.handle("monitor:indices", async () => {
-    const symbols = [
-      // Indices
-      "^GSPC", "^IXIC", "^DJI", "^FTSE", "^GDAXI", "^N225", "^HSI", "000001.SS", "^STOXX50E",
-      // Volatility + rates
-      "^VIX", "^TNX", "2YY=F",
-      // Commodities (futures)
-      "GC=F", "SI=F", "HG=F", "CL=F", "BZ=F", "NG=F", "ZW=F", "ZC=F",
-      // FX majors
-      "EURUSD=X", "GBPUSD=X", "EURGBP=X", "CHFUSD=X", "JPY=X", "CNY=X", "INR=X", "BRL=X", "TRY=X"
-    ];
-    const settled = await Promise.all(symbols.map(yahooQuote));
-    const results = settled.filter(Boolean);
-    return { quoteResponse: { result: results, error: null } };
-  });
-
-  ipcMain.handle("monitor:2y-yield", async () => {
-    const q = await yahooQuote("2YY=F");
-    if (!q) return null;
-    return {
-      chart: { result: [{ meta: q }] }
-    };
-  });
-
-  /* ---- Live push hub: poll in main → monitor:live → renderer re-renders.
-   * Only runs while the monitor window is open. Pushes only on change.
-   * Overlapping ticks are skipped (no stacked fetches). */
-  let liveTimers = [];
+  /* ---- Live push hub: ONE owner per feed → monitor:live → the page renders.
+   *
+   * Main owns news / quakes / indices. The page owns weather, air quality, space weather, GDACS, GDELT, IODA
+   * and everything that only one panel asks for. Before this split, both sides polled the same three feeds
+   * and main also sent `refresh` messages that made the page re-fetch its own feeds — the same data fetched
+   * by two owners, at 20-30 second intervals for sources that change every few minutes. The cadences and the
+   * backoff/abort rules now live in src/main/monitor-scheduler.js, where they are unit-tested. */
   const liveSigs = new Map();
-  const liveBusy = new Set();
   const LIVE_SYMBOLS = [
     "^GSPC", "^IXIC", "^DJI", "^FTSE", "^GDAXI", "^N225", "^HSI", "000001.SS", "^STOXX50E",
     "^VIX", "^TNX", "2YY=F",
@@ -1468,14 +1471,6 @@ function registerHandlers() {
     }));
     return out;
   }
-  const LIVE_REFRESH = [
-    { feed: "gdacs",  ms: 60 * 1000 },
-    { feed: "gdelt",  ms: 60 * 1000 },
-    { feed: "weather", ms: 2 * 60 * 1000 },
-    { feed: "space",  ms: 5 * 60 * 1000 },
-    { feed: "airq",   ms: 5 * 60 * 1000 }
-  ];
-
   function hashStr(s) {
     let h = 5381;
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
@@ -1493,71 +1488,73 @@ function registerHandlers() {
     pushMonitor(type, data);
   }
 
-  async function liveFetchText(url) {
-    try {
-      const resp = await net.fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (WorldMonitor)" } });
-      if (!resp.ok) return null;
-      return await resp.text();
-    } catch { return null; }
+  async function liveFetchText(url, signal) {
+    const resp = await net.fetch(url, { signal, headers: { "User-Agent": "Mozilla/5.0 (WorldMonitor)" } });
+    if (!resp.ok) throw new Error("http-" + resp.status);
+    return await resp.text();
   }
 
-  async function liveFetchJson(url) {
-    try {
-      const resp = await net.fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (WorldMonitor)" } });
-      if (!resp.ok) return null;
-      return await resp.json();
-    } catch { return null; }
+  async function liveFetchJson(url, signal) {
+    const resp = await net.fetch(url, { signal, headers: { "User-Agent": "Mozilla/5.0 (WorldMonitor)" } });
+    if (!resp.ok) throw new Error("http-" + resp.status);
+    return await resp.json();
   }
 
-  async function pollLiveNews() {
-    const parts = await mapLimit(LIVE_NEWS, 8, async s => {
-      const text = await liveFetchText(s.url);
-      return text ? { name: s.name, url: s.url, text } : null;
+  /* News: one cycle fetches every source at once (bounded to 6 in flight). A source that fails contributes
+     nothing but does not fail the cycle — only a cycle where every source failed is reported as an outage. */
+  async function loadNews({ signal }) {
+    const parts = await mapLimit(LIVE_NEWS, 6, async s => {
+      if (signal && signal.aborted) return null;
+      try {
+        const text = await liveFetchText(s.url, signal);
+        return text ? { name: s.name, url: s.url, text } : null;
+      } catch { return null; }
     });
     const ok = parts.filter(Boolean);
-    if (!ok.length) return;
-    const titles = ok.flatMap(p => (p.text.match(/<title[^>]*>[\s\S]*?<\/title>/gi) || []).slice(0, 16));
-    pushIfChanged("news", ok, hashStr(titles.join("|")));
+    if (!ok.length) throw new Error("no-news-source");
+    return ok;
   }
 
-  async function pollLiveQuakes() {
-    const data = await liveFetchJson("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson");
-    if (!data || !data.features || !data.features.length) return;
-    const ids = data.features.slice(0, 8).map(f => f.id).join(",");
-    pushIfChanged("quakes", data, data.features.length + "|" + ids);
+  async function loadQuakes({ signal }) {
+    const data = await liveFetchJson("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson", signal);
+    if (!data || !Array.isArray(data.features) || !data.features.length) throw new Error("empty-feed");
+    return data;
   }
 
-  async function pollLiveIndices() {
-    const settled = await Promise.all(LIVE_SYMBOLS.map(yahooQuote));
+  async function loadIndices({ signal }) {
+    const settled = await Promise.all(LIVE_SYMBOLS.map(sym => yahooQuote(sym, signal)));
     const results = settled.filter(Boolean);
-    if (!results.length) return;
-    const sig = results.map(r => r.symbol + ":" + (r.regularMarketPrice || 0).toFixed(4)).join("|");
-    pushIfChanged("indices", { quoteResponse: { result: results, error: null } }, sig);
+    if (!results.length) throw new Error("no-quote");
+    return { quoteResponse: { result: results, error: null } };
   }
+
+  /* Push only when the payload really changed. The signature map is cleared on stop so a reopened monitor
+     receives the current snapshot immediately even when nothing changed while it was closed. */
+  function sendLive(type, data) {
+    let sig;
+    if (type === "news") {
+      sig = hashStr(data.map(p => p.name + ":" + (p.text.match(/<title[^>]*>[\s\S]*?<\/title>/i) || [""])[0]).join("|"));
+    } else if (type === "quakes") {
+      sig = data.features.length + "|" + data.features.slice(0, 8).map(f => f.id).join(",");
+    } else {
+      sig = data.quoteResponse.result.map(r => r.symbol + ":" + (r.regularMarketPrice || 0).toFixed(4)).join("|");
+    }
+    pushIfChanged(type, data, sig);
+  }
+
+  const monitorScheduler = createMonitorScheduler({
+    loaders: { news: loadNews, quakes: loadQuakes, indices: loadIndices },
+    send: sendLive,
+    status: update => pushMonitor("feed-status", update)
+  });
 
   function startLiveHub() {
-    stopLiveHub();
-    const tick = (name, fn, ms, immediate) => {
-      const run = async () => {
-        if (liveBusy.has(name)) return;
-        liveBusy.add(name);
-        try { await fn(); } catch { /* feed error → skip cycle */ }
-        finally { liveBusy.delete(name); }
-      };
-      if (immediate) run();
-      liveTimers.push(setInterval(run, ms));
-    };
-    tick("news", pollLiveNews, 30 * 1000, true);
-    tick("quakes", pollLiveQuakes, 20 * 1000, true);
-    tick("indices", pollLiveIndices, 30 * 1000, true);
-    for (const r of LIVE_REFRESH) {
-      tick(r.feed, () => pushMonitor("refresh", { feed: r.feed }), r.ms, false);
-    }
+    liveSigs.clear();
+    monitorScheduler.start();
   }
 
   function stopLiveHub() {
-    for (const t of liveTimers) clearInterval(t);
-    liveTimers = [];
+    monitorScheduler.stop();
   }
 
   /* ---- Floating PiP chat bubble ------------------------------------------
@@ -1800,7 +1797,7 @@ function registerHandlers() {
     try { cfg = loadCfg(); } catch {}
     if (!alive(pipWin)) ipcMain.emit("pip:openbar", {}, cfg.pipDock);
     else if (!pipCollapsed) ipcMain.emit("pip:collapse");
-    try { win.hide(); } catch {}
+    hideChatWindow();
     // Teach the way back once, in the window that is still on screen.
     setTimeout(() => {
       if (alive(pipWin)) { try { pipWin.webContents.send("pip:hint", { text: "Tap the bubble to chat — reopen the app from its shortcut" }); } catch {} }
@@ -2049,18 +2046,35 @@ function registerHandlers() {
           preload: path.join(__dirname, "monitor-preload.js"),
           contextIsolation: true,
           nodeIntegration: false,
-          sandbox: false
+          // The monitor renders untrusted headlines and has no filesystem or webUtils use: it gets the
+          // strongest sandbox in the app. The chat preload needs webUtils.getPathForFile for drag-and-drop,
+          // so those two windows stay unsandboxed until that path has its own sandboxed bridge.
+          sandbox: true
         }
       });
       monitorWin.loadFile(path.join(__dirname, "monitor.html"));
       monitorWin.webContents.on("did-finish-load", () => startLiveHub());
       monitorWin.on("closed", () => { monitorWin = null; stopLiveHub(); });
+      /* The live feeds only earn their keep while somebody is looking at them: three polling loops, each one
+         a network round trip that parses JSON in the main process, for a window that is hidden behind another
+         app are pure cost on a laptop. A hidden window stops them; bringing it back starts them again, and the
+         first cycle is immediate, so the page is never left showing stale numbers. */
+      monitorWin.on("hide", stopLiveHub);
+      monitorWin.on("minimize", stopLiveHub);
+      monitorWin.on("show", () => { if (alive(monitorWin)) startLiveHub(); });
+      monitorWin.on("restore", () => { if (alive(monitorWin)) startLiveHub(); });
     } catch (err) {
       console.error("[Main] monitor creation failed:", err);
     }
   });
 
   ipcMain.on("monitor:close", () => { stopLiveHub(); if (alive(monitorWin)) monitorWin.close(); });
+
+  /* A sleeping machine does not run timers, so every feed that was due fires in one burst the moment the
+     lid opens — three requests and three JSON parses before the user's first click. Stopping them on
+     suspend and restarting them on resume turns that burst back into "the page is current again". */
+  powerMonitor.on("suspend", stopLiveHub);
+  powerMonitor.on("resume", () => { if (alive(monitorWin) && monitorWin.isVisible()) startLiveHub(); });
 }
 
 /* ===== System tray (the app runs in the background) ===================
@@ -2082,6 +2096,24 @@ function trayIcon() {
     // gives a blurred smudge next to the crisp system icons.
     return img.resize({ width: 16, height: 16, quality: "best" });
   } catch { return nativeImage.createEmpty(); }
+}
+
+/* Hiding the chat to the tray keeps its renderer (~120 MB) alive for nothing when the composer is empty.
+   Then the window is closed instead, and showChatWindow() builds it again from disk. A message still being
+   typed keeps the window hidden, so nothing written is lost. Closing is only chosen while the tray keeps the
+   app running: otherwise closing the last window would quit it. */
+async function hideChatWindow() {
+  if (!alive(win)) return;
+  let typing = true;
+  try {
+    typing = await win.webContents.executeJavaScript(
+      "(() => { const el = document.getElementById('messageInput'); return !el || el.value.trim() !== ''; })()", true);
+  } catch { typing = true; }
+  if (!alive(win)) return;
+  let keepRunning = false;
+  try { keepRunning = !!tray && !tray.isDestroyed() && loadCfg().runInBackground !== false; } catch {}
+  if (typing || !keepRunning) { try { win.hide(); } catch {} return; }
+  try { win.close(); } catch {}
 }
 
 /* Bring the chat window up (building it when it is gone) — the tray menu, the
@@ -2180,7 +2212,7 @@ function createTray() {
   /* Left click: the chat, or away with it when it is already on screen. Right
      click brings the menu by itself (refreshed first so it is never stale). */
   tray.on("click", () => {
-    if (alive(win) && win.isVisible() && !win.isMinimized()) { try { win.hide(); } catch {} }
+    if (alive(win) && win.isVisible() && !win.isMinimized()) hideChatWindow();
     else showChatWindow();
     setTimeout(refreshTrayMenu, 400);
   });
@@ -2300,26 +2332,101 @@ function createWindow() {
   return w;
 }
 
+/* Sweeps the copies earlier portable launches left in %TEMP% (see src/main/portable-janitor.js).
+   Twice, because both are needed: at launch, and then every few hours — Loopback is normally started with
+   Windows and left running for days, so a copy another launch abandons hours later would otherwise wait for
+   the next sign-in. The timer is unref'd so a janitor can never keep the process alive after the user quit. */
+const JANITOR_SWEEP_MS = 4 * 60 * 60 * 1000;
+function startPortableJanitor() {
+  if (!process.env.PORTABLE_EXECUTABLE_FILE) return;
+  const sweep = () => portableJanitor
+    .sweepStaleCopies({ tempDir: app.getPath("temp"), exePath: process.execPath })
+    .catch(() => {});
+  sweep();
+  const timer = setInterval(sweep, JANITOR_SWEEP_MS);
+  if (typeof timer.unref === "function") timer.unref();
+}
+
+/* Every page this app creates goes through these four rules before it can load anything: no child windows,
+   no navigation away from the app's own files, no <webview>, and no unvalidated external link. Registered
+   process-wide (instead of in each window) so a window added later cannot forget them. */
+app.on("web-contents-created", (_event, contents) => {
+  try {
+    contents.setWindowOpenHandler(({ url }) => {
+      const safe = externalUrl(url);
+      if (safe) shell.openExternal(safe).catch(() => {});
+      return { action: "deny" };
+    });
+    contents.on("will-navigate", (event, url) => {
+      if (isAppPage(url, __dirname)) return;
+      event.preventDefault();
+      // A markdown link in a note is a real link: open it in the user's browser, never inside Loopback.
+      const safe = externalUrl(url);
+      if (safe) shell.openExternal(safe).catch(() => {});
+    });
+    contents.on("will-attach-webview", event => event.preventDefault());
+  } catch (err) {
+    console.warn("[Main] web-contents hardening failed:", (err && err.message) || err);
+  }
+});
+
 app.whenReady().then(() => {
+  startPortableJanitor();
+
+  /* Before anything reads the data folder: a schema marker, a verified backup of what was there, and a
+     normalised file. A folder from an older version is migrated once and left alone after that; a folder
+     that cannot be read is NOT replaced (atomic-write's recovery from .bak is the only thing allowed to
+     decide that). */
+  try {
+    const result = storeMigrations.migrate(app.getPath("userData"), { appVersion: app.getVersion() });
+    if (result.migrated) {
+      console.log("[Main] data folder migrated to schema", result.schema,
+        result.backupDir ? "— backup: " + result.backupDir : "— no previous files");
+    }
+  } catch (err) {
+    logMainError("store-migration", err);
+  }
+
   ensure();
+  chatStore = store.createStore({ file: DATA() });
   registerHandlers();
   registerQuickShortcut();
 
-  // Voice + screen/camera capture: allow mic/cam/screen without native prompts.
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    const ok = permission === "media" ||
-      permission === "display-capture" ||
-      permission === "camera" ||
-      permission === "microphone" ||
-      permission === "fullscreen";
+  /* Least privilege, per role (src/main/ipc-policy.js): the chat windows may use the microphone, the camera,
+     display capture, fullscreen and the clipboard; the monitor only fullscreen + clipboard; the review card
+     only the clipboard; the picker, the quick note and the camera bubble nothing at all. A request from any
+     page that is not one of ours — or from an iframe inside one — is refused. */
+  const roleOf = wc => pageRole(wc, __dirname);
+  /* A permission belongs to the role AND to the main frame of one of our pages. The second half matters: an
+     iframe (there are none today) must not inherit the chat window's camera, and a page that navigated to an
+     external origin is refused even if its WebContents is still one of ours. */
+  const frameAllowed = details => {
+    if (!details) return true;
+    if (details.isMainFrame === false) return false;
+    if (!details.requestingUrl) return true;
+    return isAppPage(details.requestingUrl, __dirname);
+  };
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const role = roleOf(webContents);
+    const ok = permissionAllowed(role, permission) && frameAllowed(details);
+    if (!ok) console.warn("[Main] permission denied:", permission, "from", role || "untrusted");
     callback(ok);
   });
-  session.defaultSession.setPermissionCheckHandler(() => true);
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, _origin, details) =>
+    permissionAllowed(webContents ? roleOf(webContents) : null, permission) && frameAllowed(details));
 
   // getDisplayMedia() for screen recording — auto-pick the display under
-  // the cursor so the user isn't stuck in a Chromium picker.
+  // the cursor so the user isn't stuck in a Chromium picker. Only the chat window/bar may ask, and only
+  // from a user gesture; the monitor cannot start a recording.
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     try {
+      const role = request && request.frame ? roleForUrl(request.frame.url, __dirname) : null;
+      const gesture = !request || request.userGesture !== false;
+      const topFrame = !request || !request.frame || request.frame.parent == null;
+      if (!gesture || !topFrame || (role !== "chat" && role !== "pip")) {
+        console.warn("[Main] display capture denied for", role || "untrusted", gesture ? "" : "(no user gesture)");
+        return callback({ video: undefined });
+      }
       const pt = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
       const sources = await desktopCapturer.getSources({
         types: ["screen"],
