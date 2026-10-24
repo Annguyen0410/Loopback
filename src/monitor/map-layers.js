@@ -18,6 +18,9 @@ import { $, esc } from "./utils.js";
 import { CHOKES } from "./chokepoints.js";
 import { renderDatacenters, renderNuclear, renderBases, renderSpaceports } from "./sites.js";
 import { fetchJSON } from "./net.js";
+import { allEvents, subscribeEvents } from "./event-store.js";
+import { categoryLabel, formatAge } from "./event-model.mjs";
+import { clusterEvents } from "./heat-model.mjs";
 
 if (typeof window !== "undefined") window.__mapLayers = { debug: () => import("./map-layers.js").then(m => m.debugLayerState()) };
 
@@ -46,7 +49,7 @@ const RENDERERS = {
   ports: renderPorts, cables: renderCables, conflict: renderConflict,
   military: drawAircraft, satellites: drawSatellites, chokepoints: renderChokepoints,
   datacenters: renderDatacenters, nuclear: renderNuclear, bases: renderBases,
-  spaceports: renderSpaceports
+  spaceports: renderSpaceports, eventHeat: renderEventHeat
 };
 
 export function renderLayer(name) { const f = RENDERERS[name]; if (f) f(); }
@@ -314,6 +317,42 @@ function renderChokepoints() {
   }
 }
 
+/* ---------- Event density (derived from the normalized event store) ----------
+ * One circle per coarse lat/lng cell over the last 24 h. It is a count of
+ * cached records that carried coordinates — not a risk or casualty estimate.
+ * Events without coordinates are excluded, never snapped to a country. */
+
+function renderEventHeat() {
+  const g = getMapLayer("eventHeat");
+  if (!g) return;
+  g.clearLayers();
+  if (!layerState.eventHeat) return;
+  const clusters = clusterEvents(allEvents(), {
+    from: Date.now() - 24 * 60 * 60 * 1000,
+    cellSize: 6,
+    max: 60
+  });
+  for (const cluster of clusters) {
+    const sev = cluster.crit > 0 ? "crit" : cluster.warn > 0 ? "warn" : "info";
+    const color = sev === "crit" ? "#ff5c66" : sev === "warn" ? "#ff7a45" : "#3d9dff";
+    const radius = Math.min(26, 6 + Math.sqrt(cluster.count) * 3.5);
+    const marker = L.circleMarker([cluster.lat, cluster.lng], {
+      radius, fillColor: color, color, weight: 1, opacity: 0.75, fillOpacity: 0.25
+    });
+    const cats = cluster.categories.slice(0, 3)
+      .map(cat => esc(categoryLabel(cat.id)) + " " + cat.count).join(" · ");
+    marker.bindPopup('<div class="popup-mag" style="color:' + color + '">' + cluster.count +
+      " event" + (cluster.count === 1 ? "" : "s") + " · 24h</div>" +
+      '<div class="popup-place">' + cats + "</div>" +
+      '<div class="popup-row"><span class="popup-label">Severity</span><span class="popup-value">' +
+      cluster.crit + " critical · " + cluster.warn + " warning</span></div>" +
+      '<div class="popup-row"><span class="popup-label">Latest</span><span class="popup-value">' +
+      esc(formatAge(cluster.latest)) + "</span></div>" +
+      '<div class="popup-row"><span class="popup-label">Note</span><span class="popup-value">cached records, not a risk score</span></div>');
+    marker.addTo(g);
+  }
+}
+
 /* ---------- master init + re-render on toggle ---------- */
 
 export function initMapLayers() {
@@ -328,6 +367,8 @@ export function initMapLayers() {
   renderNuclear();
   renderBases();
   renderSpaceports();
+  renderEventHeat();
+  subscribeEvents(() => { if (layerState.eventHeat) renderEventHeat(); });
   initTraffic();
   drawSatellites();
   setInterval(drawSatellites, 15000);

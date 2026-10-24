@@ -69,3 +69,24 @@
 - `npm run build` — Windows portable + NSIS artifacts built from the release tree.
 - Live Launch Library 2 request returned HTTP 200 and real launch rows at audit time; the app still renders an explicit OFFLINE state when the proxy denies or the upstream is down.
 - Existing `/world` entry point, single-window behavior and hidden-only navigation were preserved; no Monitor button was added to the main app or tray.
+
+## v1.7 follow-up (2026-10-23)
+
+This pass revisited the items deferred above and added four capabilities that reuse the existing
+feed layer instead of adding another polling engine.
+
+| Capability / user value | Reference | Loopback status now | Evidence | Decision |
+|---|---|---|---|---|
+| Cyber advisories alongside conflict/outage feeds | WM documents cyber streams | **Added** | `src/monitor/cyber.js`, `cyber-model.mjs`; CISA's public advisory RSS; host in `src/main/monitor-proxy.js` | Added because it is a real, key-free government feed with per-item links. It is advisory data, not intrusion telemetry; severity is a documented keyword rule. |
+| Deterministic global brief | WM advertises AI-synthesized briefs | **Added (no AI)** | `sitrep-model.mjs`, `sitrep.js`; counts + top records + feed health | The brief reads only the cached event store. No model, key, subscription or chat content leaves the machine. An opt-in local model remains a separate design. |
+| Saved/pinned records | Not present in either reference | **Added** | `pins.js`, SAVE action in `event-view.js` | Keeps a local snapshot after the 72 h live window; bounded to 60 records in this profile's `localStorage`. |
+| Event-density map layer | JM has a quake map; WM has shared layer catalogs | **Added** | `heat-model.mjs`, `renderEventHeat()` in `map-layers.js` | Derived solely from cached, geolocated records in the last 24 h. The popup states it is a count, not a risk score. No new dependency, tile server or heat plugin. |
+| Ships/AIS, displacement, video wall, 3D globe, cloud AI | WM | **Not added** | — | Still rejected/deferred for the reasons above: no verified key-free source with acceptable terms, or a large runtime/GPU/privacy cost. No placeholder data was introduced. |
+
+Verification for the follow-up:
+
+- `npm test` — 82 deterministic tests, including the new heat, CISA and brief models.
+- `npx electron monitortest.js` — 55 checks, 0 failures, 0 console errors; the new group verifies the CISA
+  panel, SITREP render, saved-event UI and the event-density layer with stubbed feeds.
+- `npm run build` — Windows portable + NSIS artifacts from this tree (see the release record).
+- The hidden `/world` entry point and single-window behavior are unchanged; no Monitor button was added.

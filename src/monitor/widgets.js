@@ -17,6 +17,7 @@ export const WIDGETS = [
   { id: "threatPanel",  name: "Threat Log",       color: "#ff4444", def: true  },
   { id: "eventsPanel",  name: "World Events",     color: "#00ccff", def: true  },
   { id: "earthCamPanel", name: "Earth Cam",        color: "#00ccff", def: true  },
+  { id: "sitrepPanel",  name: "Situation Brief",  color: "#0088ff", def: true  },
   { id: "feedPanel",    name: "Feed Status",      color: "#00ff88", def: true  },
   { id: "spacePanel",   name: "Space Weather",    color: "#ffaa00", def: true  },
   { id: "weatherPanel", name: "World Weather",    color: "#00aaff", def: true  },

@@ -50,6 +50,14 @@ ipcMain.handle("monitor:proxy", async (_e, url) => {
       <geo:lat>15.0</geo:lat><geo:long>90.0</geo:long><gdacs:eventid>12345</gdacs:eventid></item>
       </channel></rss>` };
   }
+  if (u.includes("www.cisa.gov")) {
+    return { ok: true, text: `<?xml version="1.0"?><rss><channel>
+      <item><title>CISA test advisory on a router flaw</title><link>https://www.cisa.gov/test-advisory</link>
+      <pubDate>Fri, 23 Oct 2026 10:00:00 GMT</pubDate><description>Patch guidance for the test advisory.</description></item>
+      <item><title>CISA Adds One Known Exploited Vulnerability to Catalog</title><link>https://www.cisa.gov/test-kev</link>
+      <pubDate>Fri, 23 Oct 2026 09:00:00 GMT</pubDate><description>Catalog update.</description></item>
+      </channel></rss>` };
+  }
   if (u.includes("gamma-api.polymarket.com")) {
     return { ok: true, json: [
       { active: true, closed: false, question: "Will the test suite pass before Friday?",
@@ -363,6 +371,46 @@ app.whenReady().then(async () => {
     ok(/stale/.test(r.row) && /ok 2m/.test(r.row), "feed row shows stale + last-success age", r.row);
     ok(/last success 2m ago/.test(r.title) && /last error: timeout/.test(r.title), "tooltip carries last success and error", r.title);
     ok(/trendtest/.test(r.trends.toLowerCase()) && /3 sources/.test(r.trends), "trend requires and reports cross-source volume", r.trends);
+  });
+
+  /* 10 — v1.7 additions: CISA panel, deterministic brief, saved events and
+     the derived event-density layer. Fixtures keep this offline-safe. */
+  test("v1.7: cyber advisories, sitrep, saved events and event heat", async () => {
+    const r = await j(`(async () => {
+      const cyber = await import("./src/monitor/cyber.js?fresh=" + Date.now());
+      cyber.initCyber();
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const cyberText = document.getElementById("cyberList").textContent;
+
+      const store = await import("./src/monitor/event-store.js");
+      const withPoint = store.getEvents({ limit: 50 }).find(event => event.lat != null && event.lng != null);
+      const pins = await import("./src/monitor/pins.js");
+      if (withPoint) pins.togglePin(withPoint);
+      const view = await import("./src/monitor/event-view.js");
+      view.renderEventsTab();
+      const savedEl = document.getElementById("evSaved");
+
+      const sitrep = await import("./src/monitor/sitrep.js?fresh=" + Date.now());
+      sitrep.initSitrep();
+      const sitrepText = document.getElementById("sitrepBody").textContent;
+
+      const layers = await import("./src/monitor/layer-toggles.js");
+      layers.toggleLayer("eventHeat", true);
+      const mapLayers = await import("./src/monitor/map-layers.js");
+      await new Promise(resolve => setTimeout(resolve, 80));
+      return {
+        cyberText,
+        savedVisible: !savedEl.hidden,
+        savedText: savedEl.textContent,
+        pinCount: pins.pinCount(),
+        sitrepText,
+        heat: mapLayers.debugLayerState().eventHeat
+      };
+    })()`);
+    ok(/CISA test advisory|Known Exploited/.test(r.cyberText), "CISA advisories render from a real feed shape", r.cyberText.slice(0, 160));
+    ok(r.savedVisible && r.pinCount === 1 && /CISA|test|quake/i.test(r.savedText), "a saved event appears in the EVENTS tab", r.savedText);
+    ok(/ops/.test(r.sitrepText) && /Deterministic|deterministic/.test(r.sitrepText), "sitrep renders from cached records only", r.sitrepText.slice(0, 180));
+    ok(r.heat && r.heat.markers >= 1, "event-density layer draws a cell from geolocated records", r.heat);
   });
 
   /* run everything sequentially */

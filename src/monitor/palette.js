@@ -7,6 +7,7 @@
 import { $, esc } from "./utils.js";
 import { categoryLabel, formatAge } from "./event-model.mjs";
 import { getEvents } from "./event-store.js";
+import { pinnedEvents } from "./pins.js";
 import { focusEvent } from "./event-view.js";
 import { activate } from "./sidebar-tabs.js";
 import { toggleLayer, layerState, LAYER_META } from "./layer-toggles.js";
@@ -29,6 +30,13 @@ function buildCommands() {
   for (const tab of TABS) {
     cmds.push({ type: "tab", label: tab.label, hint: "Open tab", keywords: "section panel", run: () => activate(tab.id) });
   }
+  cmds.push({
+    type: "tab",
+    label: "Saved events",
+    hint: "Pinned records",
+    keywords: "bookmarks pins saved",
+    run: () => activate("events")
+  });
   for (const layer of LAYER_META) {
     cmds.push({
       type: "layer",
@@ -58,13 +66,27 @@ function buildCommands() {
   }
   // Events are already cached; the date filter keeps a 72 h window and the
   // cap keeps the palette quick on a long session.
-  for (const event of getEvents({ from: Date.now() - 72 * 60 * 60 * 1000, limit: 160 })) {
+  const recent = getEvents({ from: Date.now() - 72 * 60 * 60 * 1000, limit: 160 });
+  for (const event of recent) {
     cmds.push({
       type: "event",
       label: event.title,
       hint: categoryLabel(event.category) + " · " + event.source + " · " +
         formatAge(event.eventTime || event.observedAt),
       keywords: [event.category, event.source, event.country, event.countryName].filter(Boolean).join(" "),
+      run: () => focusEvent(event.id)
+    });
+  }
+  // Saved records may outlive the live window; index them too, without a
+  // duplicate row for one that is still in the recent list.
+  const recentIds = new Set(recent.map(event => event.id));
+  for (const event of pinnedEvents()) {
+    if (recentIds.has(event.id)) continue;
+    cmds.push({
+      type: "saved",
+      label: event.title,
+      hint: "Saved · " + categoryLabel(event.category) + " · " + event.source,
+      keywords: ["saved", "pinned", event.category, event.country].filter(Boolean).join(" "),
       run: () => focusEvent(event.id)
     });
   }

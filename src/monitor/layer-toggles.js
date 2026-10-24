@@ -13,7 +13,7 @@ import { setDayNight } from "./daynight.js";
 
 // Default visibility. Layers with no free real source (naval, cyber, disease,
 // GPS jamming) were removed rather than shown as simulated data.
-const DEFAULTS = { quakes: 1, military: 0, wildfire: 1, weatherEvents: 1, satellites: 0, cables: 0, ports: 1, airq: 1, conflict: 0, chokepoints: 0, dayNight: 1, datacenters: 0, nuclear: 0, bases: 0, spaceports: 0 };
+const DEFAULTS = { quakes: 1, military: 0, wildfire: 1, weatherEvents: 1, satellites: 0, cables: 0, ports: 1, airq: 1, conflict: 0, chokepoints: 0, dayNight: 1, datacenters: 0, nuclear: 0, bases: 0, spaceports: 0, eventHeat: 0 };
 
 // Human labels used by the command palette + toggles.
 export const LAYER_META = [
@@ -32,7 +32,8 @@ export const LAYER_META = [
   { id: "datacenters", label: "AI data centers" },
   { id: "nuclear", label: "Nuclear facilities" },
   { id: "bases", label: "Military bases" },
-  { id: "spaceports", label: "Spaceports" }
+  { id: "spaceports", label: "Spaceports" },
+  { id: "eventHeat", label: "Event density (24h)" }
 ];
 
 export const layerState = { quakes: true }; // layer -> visible

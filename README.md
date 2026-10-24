@@ -254,7 +254,7 @@ feature that uses the internet is the hidden workspace, and only while its windo
 - It reads **public, key-less sources**: USGS (quakes), GDACS (disasters), GDELT (conflict reports), IODA
   (outages), NOAA SWPC (space weather), Open-Meteo (weather/air quality), OpenSky, SatNOGS, EONET, World Bank,
   Polymarket, Yahoo Finance quotes, The Space Devs **Launch Library 2** (scheduled launches from its
-  rate-limited free tier), and the RSS/Atom feeds of newsrooms listed in
+  rate-limited free tier), **CISA** cyber advisories, and the RSS/Atom feeds of newsrooms listed in
   `src/monitor/news-sources.json`.
 - Requests that need CORS help go through the main process behind an exact hostname allowlist: **HTTPS only**,
   no credentials in the URL, redirects followed only to another allowlisted host, a **12 s deadline**, an
@@ -302,6 +302,19 @@ or bubble.
   into T-plus for the first day after the window, plus the launch time in UTC and a direct source link. It is a
   schedule, not a guarantee: a failed request shows Launch Library 2 as unreachable instead of inventing a
   launch, and an upstream status change remains visible.
+- **Cyber advisories.** The public CISA advisory feed lists published alerts with a direct link to each
+  advisory. WARN marks a title that mentions known/active exploitation or an emergency directive — a stated
+  keyword rule, not a CVSS score. An unreachable feed says OFFLINE; it never turns into an all-clear.
+- **Situation brief.** A deterministic 24-hour summary built from the cached event store: operational counts,
+  critical/warning totals, top categories and countries, the highest-signal records with their sources, and the
+  current feed health. **Copy brief** puts that text on the clipboard. No model, key or extra request is used;
+  the panel says so.
+- **Saved events.** Save a record from its detail card to keep a local snapshot after it leaves the 72-hour live
+  window. Saved records stay searchable in the palette, open with the same source fields and can be removed
+  from the detail card. They live in this profile's `localStorage`, not on a server.
+- **Event density.** A map layer groups geolocated records from the last 24 hours into coarse cells and sizes
+  each circle by the number of cached records in it. The popup reports the category mix and says explicitly
+  that it is a count, not a risk score; events without coordinates are not plotted.
 - **Panel isolation.** A dead feed leaves its own card in an OFFLINE state and cannot blank the rest of the
   workspace; the close path still tears down the scheduler and page timers.
 
@@ -447,7 +460,7 @@ been lost.
   instead), and it launches.
 - The global hotkey is registered best-effort: if another app already owns
   `Ctrl+Alt+N` the ⚡ rail button still opens the popup (a warning is logged).
-- **Unit tests**: `npm test` runs `node --test "tests/*.test.js"` — pure-logic suites with no display and no
+- **Unit tests**: `npm test` runs `node --test "tests/*.test.js" "tests/*.test.mjs"` — pure-logic suites with no display and no
   network: atomic writes, the portable janitor, the IPC role policy, external-URL validation, the feed
   scheduler (one owner per feed, overlap guard, backoff, abort, timeout), the monitor proxy (allowlist,
   redirects, body cap, cooldowns, concurrency), the chat store (revision guard, stale quick note, size cap) and

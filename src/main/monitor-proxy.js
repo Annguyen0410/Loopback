@@ -83,7 +83,8 @@ const ALLOWED_HOSTS = new Set([
   'api.worldbank.org',
   'marine-api.open-meteo.com',
   'gamma-api.polymarket.com',
-  'll.thespacedevs.com'
+  'll.thespacedevs.com',
+  'www.cisa.gov'
 ]);
 
 const TEXTUAL_TYPE = /^(?:application\/(?:json|geo\+json|xml|rss\+xml|atom\+xml|x-www-form-urlencoded)|text\/(?:plain|html|xml|csv)|application\/octet-stream)?\s*(?:;|$)/i;

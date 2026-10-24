@@ -1082,3 +1082,62 @@ select.route-input{cursor:pointer}
 .brief-actions .route-btn{flex:1;font-size:8px;padding:6px 5px;margin:0}
 .brief-copy{color:var(--text-muted)}
 .palette-empty{font-size:10px;color:var(--text-dim);padding:14px;text-align:center;font-style:italic}
+
+/* ============================================================
+   CYBER ADVISORIES (CISA)
+   ============================================================ */
+.cyber-row{display:flex;align-items:flex-start;gap:7px;padding:5px 4px;border-bottom:1px solid var(--border-soft)}
+.cyber-row:last-of-type{border-bottom:none}
+.cyber-sev{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-top:5px;background:var(--blue)}
+.cyber-sev.warn{background:var(--orange);box-shadow:0 0 5px rgba(255,122,69,.5)}
+.cyber-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cyber-main a{font-size:10px;line-height:1.35;color:var(--text-secondary);text-decoration:none;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cyber-main a:hover{color:var(--accent)}
+.cyber-meta{font-size:7.5px;color:var(--text-dim);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cyber-note{font-size:7.5px;color:var(--text-dim);font-style:italic;line-height:1.4;margin-top:5px}
+
+/* ============================================================
+   SITUATION BRIEF (deterministic, cached records only)
+   ============================================================ */
+.sitrep-body{padding:2px 0 0}
+.sitrep-counts{display:flex;gap:9px;flex-wrap:wrap;font-size:8px;letter-spacing:.6px;color:var(--text-dim);text-transform:uppercase}
+.sitrep-counts b{color:var(--text-secondary);font-size:12px;margin-right:2px}
+.sitrep-counts .sitrep-crit b{color:var(--red)}
+.sitrep-counts .sitrep-warn b{color:var(--orange)}
+.sitrep-cats{font-size:8px;line-height:1.4;color:var(--text-muted);margin-top:5px;padding-bottom:5px;border-bottom:1px solid var(--border-soft)}
+.sitrep-cats b{color:var(--text-secondary);font-weight:600}
+.sitrep-list{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.sitrep-row{display:flex;align-items:flex-start;gap:6px;padding:4px 3px;border-radius:5px}
+.sitrep-row:hover{background:rgba(255,255,255,.035)}
+.sitrep-sev{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-top:5px;background:var(--blue)}
+.sitrep-sev.warn{background:var(--orange)}
+.sitrep-sev.crit{background:var(--red);box-shadow:0 0 5px rgba(255,92,102,.6)}
+.sitrep-main{display:flex;flex-direction:column;gap:1px;min-width:0}
+.sitrep-main a{font-size:9.5px;line-height:1.3;color:var(--text-secondary);text-decoration:none;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.sitrep-main a:hover{color:var(--accent)}
+.sitrep-meta{font-size:7px;color:var(--text-dim);letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sitrep-feeds{font-size:7.5px;color:var(--text-dim);margin-top:6px;padding-top:5px;border-top:1px solid var(--border-soft)}
+.sitrep-feeds.warn{color:var(--red)}
+.sitrep-actions{display:flex;gap:5px;margin-top:6px}
+.sitrep-actions .route-btn{flex:1;font-size:7.5px;padding:5px 4px;margin:0}
+.sitrep-open{color:var(--text-muted)}
+.sitrep-note{font-size:7px;line-height:1.4;color:var(--text-dim);font-style:italic;margin-top:5px}
+.sitrep-note.warn{color:var(--red);font-style:normal;border:1px solid rgba(255,92,102,.25);border-radius:5px;padding:5px;background:rgba(255,92,102,.05)}
+
+/* ============================================================
+   SAVED EVENTS
+   ============================================================ */
+.ev-saved{border:1px solid rgba(255,184,77,.2);background:rgba(255,184,77,.035);border-radius:7px;padding:6px;margin-bottom:7px}
+.ev-saved-head{display:flex;align-items:center;gap:6px;font-size:7.5px;font-weight:800;letter-spacing:1.3px;color:var(--amber);margin-bottom:3px}
+.ev-saved-head span{color:var(--text-dim);font-weight:500}
+.ev-saved-list{display:flex;flex-direction:column;gap:1px}
+.ev-saved-row{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer;font-size:9px;line-height:1.3}
+.ev-saved-row:hover{background:rgba(255,255,255,.04)}
+.ev-saved-row.crit .ev-saved-star{color:var(--red)}
+.ev-saved-row.warn .ev-saved-star{color:var(--orange)}
+.ev-saved-star{color:var(--amber);flex-shrink:0;font-size:9px}
+.ev-saved-title{color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.ev-saved-age{color:var(--text-dim);font-size:7.5px;flex-shrink:0}
+.evd-pin{background:rgba(255,184,77,.07);border-color:rgba(255,184,77,.25);color:var(--amber)}
+.evd-pin.on{background:rgba(255,184,77,.16);color:#ffd18a}
+.evd-saved-note{font-size:8px;line-height:1.4;color:var(--amber);margin-bottom:6px;padding:4px 6px;border-left:2px solid rgba(255,184,77,.5);background:rgba(255,184,77,.05)}

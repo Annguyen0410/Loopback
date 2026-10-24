@@ -10,6 +10,7 @@
 import { $, esc, escAttr, safeHref } from "./utils.js";
 import { categoryLabel, eventMatchesCountry, formatAge } from "./event-model.mjs";
 import { allEvents, eventById, getEvents, subscribeEvents } from "./event-store.js";
+import { isPinned, pinnedEvents, savedEventById, subscribePins, togglePin } from "./pins.js";
 import { renderTrending } from "./trending.js";
 import { map } from "./map-engine.js";
 
@@ -34,7 +35,10 @@ function stamp(event) {
 }
 
 function selectedEvent() {
-  return state.selected ? eventById(state.selected) : null;
+  if (!state.selected) return null;
+  // A saved record outlives the 72 h live window; keep it readable from its
+  // local snapshot instead of pretending it vanished.
+  return eventById(state.selected) || savedEventById(state.selected);
 }
 
 function timeText(event) {
@@ -83,6 +87,27 @@ function renderCountryChip() {
   if (!state.country) { chip.hidden = true; chip.textContent = ""; return; }
   chip.hidden = false;
   chip.innerHTML = "Country: " + esc(state.countryLabel || state.country) + ' <span class="ev-chip-x" aria-hidden="true">✕</span>';
+}
+
+function renderSaved() {
+  const wrap = $("evSaved");
+  const list = $("evSavedList");
+  const count = $("evSavedCount");
+  if (!wrap || !list) return;
+  const saved = pinnedEvents();
+  if (count) count.textContent = String(saved.length);
+  wrap.hidden = !saved.length;
+  if (!saved.length) { list.innerHTML = ""; return; }
+  let html = "";
+  for (const event of saved.slice(0, 8)) {
+    const sev = event.severity === "crit" ? "crit" : event.severity === "warn" ? "warn" : "info";
+    html += '<div class="ev-saved-row ' + sev + '" data-event-id="' + escAttr(event.id) + '" tabindex="0" role="button" title="Saved · ' +
+      escAttr(event.source || "unknown source") + '">' +
+      '<span class="ev-saved-star">★</span>' +
+      '<span class="ev-saved-title">' + esc(event.title) + "</span>" +
+      '<span class="ev-saved-age">' + esc(formatAge(event.eventTime || event.observedAt)) + "</span></div>";
+  }
+  list.innerHTML = html;
 }
 
 function renderList() {
@@ -135,10 +160,12 @@ function renderDetail() {
   const sourceLink = event.url
     ? '<a class="evd-link" href="' + safeHref(event.url) + '" target="_blank" rel="noopener">Open at source ↗</a>'
     : '<span class="evd-muted">No source link</span>';
+  const pinned = isPinned(event.id);
   box.innerHTML =
     '<div class="evd-head"><span class="evt-cat">' + esc(event.category) + "</span>" +
     '<span class="evd-sev ' + event.severity + '">' + esc(event.severity.toUpperCase()) + "</span>" +
     '<button class="evd-close" id="evdClose" title="Close details" aria-label="Close details">✕</button></div>' +
+    (!eventById(event.id) ? '<div class="evd-saved-note">Saved copy — this record has left the 72h live window. Its source fields are unchanged from when it was saved.</div>' : "") +
     '<div class="evd-title">' + esc(event.title) + "</div>" +
     (event.summary ? '<div class="evd-summary">' + esc(event.summary) + "</div>" : "") +
     '<div class="evd-rows">' +
@@ -148,10 +175,19 @@ function renderDetail() {
     '<div><span>Location</span><b>' + esc(point) + (event.country ? " · " + esc(event.countryName || event.country) : "") + "</b></div>" +
     "</div>" +
     '<div class="evd-actions">' + sourceLink +
+    '<button class="evd-btn evd-pin' + (pinned ? " on" : "") + '" id="evdPin" title="' +
+    (pinned ? "Remove from saved events" : "Keep a local copy of this record") + '">' +
+    (pinned ? "★ SAVED" : "☆ SAVE") + "</button>" +
     (event.lat != null && event.lng != null ? '<button class="evd-btn" id="evdMap">Center map</button>' : "") +
     "</div>";
   const close = $("evdClose");
   if (close) close.onclick = () => { state.selected = ""; box.hidden = true; renderList(); };
+  const pin = $("evdPin");
+  if (pin) pin.onclick = () => {
+    togglePin(event);
+    renderSaved();
+    renderDetail();
+  };
   const center = $("evdMap");
   if (center) center.onclick = () => centerOn(event);
 }
@@ -214,6 +250,7 @@ function syncControls() {
 
 export function renderEventsTab() {
   refreshCategoryOptions();
+  renderSaved();
   renderList();
   renderDetail();
   renderTrending();
@@ -255,6 +292,20 @@ export function initEventView({ activate } = {}) {
     state.countryLabel = "";
     renderList();
   });
+  const savedList = $("evSavedList");
+  if (savedList) {
+    const openSaved = target => {
+      const row = target.closest && target.closest(".ev-saved-row");
+      if (row) selectEvent(row.getAttribute("data-event-id"));
+    };
+    savedList.addEventListener("click", event => openSaved(event.target));
+    savedList.addEventListener("keydown", event => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (!(event.target.closest && event.target.closest(".ev-saved-row"))) return;
+      event.preventDefault();
+      openSaved(event.target);
+    });
+  }
   const list = $("evList");
   if (list) {
     list.addEventListener("click", event => {
@@ -281,6 +332,8 @@ export function initEventView({ activate } = {}) {
       renderTrending();
     }
   });
+  subscribePins(renderSaved);
   refreshCategoryOptions();
+  renderSaved();
   renderList();
 }

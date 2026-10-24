@@ -5,9 +5,9 @@ device/profile; do not mark one passed unless it was actually performed on that 
 
 ## Automated (run from the repository root)
 
-- [ ] `npm test` — 69 pure-logic tests: atomic writes, portable janitor, IPC role policy, external-URL rules,
-      feed scheduler, monitor proxy, chat store, data migration, event model/dedupe, watch rules/cooldowns and
-      trending baselines.
+- [ ] `npm test` — 82 pure-logic tests: atomic writes, portable janitor, IPC role policy, external-URL rules,
+      feed scheduler, monitor proxy, chat store, data migration, event model/dedupe, watch rules/cooldowns,
+      trending baselines, event-density cells, CISA advisory normalization and the situation brief.
 - [ ] `npx electron audittest.js` — opens/closes every window, checks the single region picker, and that
       the hidden workspace opens exactly one window without saving its trigger as a chat message.
 - [ ] `npx electron piptest.js` — bubble/bar states, drag, dock, resize, recording HUD.
@@ -55,6 +55,13 @@ device/profile; do not mark one passed unless it was actually performed on that 
 - [ ] Opening the workspace does not start any feed while it is closed; chat-only use stays idle.
 - [ ] Closing, hiding or minimizing the workspace stops main's scheduler; reopening resumes once.
 - [ ] Failed feeds show OFFLINE/STALE, never "no events"; static panels show STATIC with their edit date.
+- [ ] Cyber advisories show CISA items with working source links, or an explicit OFFLINE state; WARN means the
+      title mentions exploitation/emergency action, not an invented CVSS score.
+- [ ] SITREP counts match the EVENTS tab, names each record's source and says it is deterministic; COPY BRIEF
+      copies the same text.
+- [ ] SAVE on an event detail adds it to SAVED; it survives a reload and stays readable after the live window;
+      unsaving removes it.
+- [ ] Event Heat draws cells only for geolocated records and its popup says "cached records, not a risk score".
 - [ ] EVENTS filters by time/category/severity/source; a row opens details, a source link and (when present)
       centers the map; events without coordinates remain readable.
 - [ ] Ctrl/Cmd+K finds a cached headline/event and opens it; typing does not fire network requests.

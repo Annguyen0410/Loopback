@@ -62,6 +62,10 @@
           <div class="fin-table" id="iodaList"><div class="panel-loading"><div class="skel w-90"></div><div class="skel w-60"></div></div></div>
         </div>
         <div class="fin-section">
+          <div class="fin-sec-title">CYBER ADVISORIES <span class="choke-ref">CISA</span> <span class="fin-live-dot" id="dotCyber" style="display:none">◉</span></div>
+          <div class="fin-table" id="cyberList"><div class="panel-loading"><div class="skel"></div><div class="skel w-75"></div><div class="skel w-90"></div></div></div>
+        </div>
+        <div class="fin-section">
           <div class="fin-sec-title">AIR QUALITY HOTSPOTS <span class="fin-live-dot" id="dotOaq" style="display:none">◉</span></div>
           <div class="fin-table" id="oaqList"><div class="panel-loading"><div class="skel w-75"></div><div class="skel"></div></div></div>
         </div>
@@ -115,6 +119,10 @@
           </select>
         </div>
         <div class="ev-toolbar"><span class="ev-country-chip" id="evCountryChip" hidden></span><span class="ev-count" id="evCount"></span></div>
+        <div class="ev-saved" id="evSaved" hidden>
+          <div class="ev-saved-head">SAVED <span id="evSavedCount">0</span></div>
+          <div class="ev-saved-list" id="evSavedList"></div>
+        </div>
         <div class="ev-list" id="evList"></div>
         <div class="ev-detail" id="evDetail" hidden></div>
         <div class="fin-section">
@@ -289,6 +297,7 @@
     <label class="layer-toggle"><input type="checkbox" data-layer="nuclear"> <span class="layer-dot" style="background:#ffcc00"></span>Nuclear</label>
     <label class="layer-toggle"><input type="checkbox" data-layer="bases"> <span class="layer-dot" style="background:#ff5533"></span>Bases</label>
     <label class="layer-toggle"><input type="checkbox" data-layer="spaceports"> <span class="layer-dot" style="background:#bb88ff"></span>Spaceports</label>
+    <label class="layer-toggle"><input type="checkbox" data-layer="eventHeat"> <span class="layer-dot" style="background:#ff5c66"></span>Event Heat</label>
     <div class="layer-divider" aria-hidden="true"></div>
     <button class="widget-toggle" title="Toggle" data-target="layerBar" aria-label="Collapse layer bar">&#x23FB;</button>
   </div>
@@ -323,6 +332,13 @@
         <div class="alert-title">ALERTS</div>
         <div class="alert-count" id="alertCount">0</div>
       </div>
+    </div>
+
+    <!-- Deterministic situation brief (cached records only) -->
+    <div class="widget panel" id="sitrepPanel" data-widget="sitrepPanel" data-name="SITREP">
+      <button class="widget-toggle" title="Toggle" data-target="sitrepPanel">&#x23FB;</button>
+      <div class="panel-head blue">SITUATION BRIEF <span class="choke-ref">24H</span></div>
+      <div class="sitrep-body" id="sitrepBody"></div>
     </div>
 
     <!-- Seismic stats -->
