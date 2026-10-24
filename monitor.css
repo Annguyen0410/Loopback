@@ -138,9 +138,21 @@ input,select{font-family:inherit}
   font-size:9px;letter-spacing:1.5px;color:var(--red);
   font-weight:700;padding:3px 8px;border-radius:4px;
   background:rgba(255,92,102,.1);border:1px solid rgba(255,92,102,.25);
+  pointer-events:auto; /* the header itself is click-through, but the badge's health tooltip must be reachable */
 }
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(--red);animation:pulse 1.5s infinite}
-@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 5px var(--red)}50%{opacity:.3;box-shadow:none}}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--red);animation:live-pulse 1.5s infinite}
+/* The header badge is a claim about the feeds, not decoration: green only when every polled feed answered,
+   amber when some data is stale, red when nothing is live, grey while the first poll is still in flight. */
+.header-live.live{color:var(--accent);background:rgba(45,255,168,.09);border-color:rgba(45,255,168,.28)}
+.header-live.live .live-dot{background:var(--accent);box-shadow:0 0 6px rgba(45,255,168,.8)}
+.header-live.degraded{color:var(--amber);background:rgba(255,184,77,.09);border-color:rgba(255,184,77,.3)}
+.header-live.degraded .live-dot{background:var(--amber);box-shadow:0 0 6px rgba(255,184,77,.8)}
+.header-live.cached{color:var(--amber);background:rgba(255,184,77,.07);border-color:rgba(255,184,77,.24)}
+.header-live.cached .live-dot{background:var(--amber);animation:none}
+.header-live.offline{color:var(--red);background:rgba(255,92,102,.1);border-color:rgba(255,92,102,.3)}
+.header-live.offline .live-dot{background:var(--red)}
+.header-live.starting{color:var(--text-muted);background:rgba(255,255,255,.04);border-color:var(--border)}
+.header-live.starting .live-dot{background:var(--text-muted);animation:live-pulse 2s infinite}
 .header-clock{
   font-size:16px;font-weight:700;color:var(--accent);
   letter-spacing:1.5px;font-variant-numeric:tabular-nums;
@@ -719,6 +731,16 @@ select.route-input{cursor:pointer}
 .signal-title a{color:inherit;text-decoration:none;transition:color var(--t-fast)}
 .signal-title a:hover{color:var(--text-primary)}
 .signal-age{flex-shrink:0;font-size:9px;color:var(--text-dim)}
+.signal-cache{
+  display:flex;align-items:center;gap:6px;margin:0 0 5px;padding:3px 6px;
+  font-size:8.5px;letter-spacing:.8px;color:var(--amber);
+  background:rgba(255,184,77,.06);border:1px solid rgba(255,184,77,.22);border-radius:4px;
+}
+.news-track .news-cache{
+  flex-shrink:0;font-size:8px;font-weight:700;letter-spacing:1px;color:var(--amber);
+  background:rgba(255,184,77,.1);border:1px solid rgba(255,184,77,.25);
+  border-radius:3px;padding:2px 5px;
+}
 
 /* ===== INSTABILITY INDEX (INTEL) ===== */
 .inst-row{display:flex;align-items:center;gap:7px;padding:4px 0;font-size:11px}

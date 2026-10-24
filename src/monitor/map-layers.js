@@ -128,7 +128,6 @@ function renderStorms() {
  * the layer stays empty rather than inventing traffic.
  */
 
-let trafficTimer = null;
 let liveAircraft = null;
 
 export function setAircraftLive(list) {
@@ -137,9 +136,11 @@ export function setAircraftLive(list) {
 }
 
 export function initTraffic() {
-  if (!map || trafficTimer) return;
+  if (!map) return;
+  /* No timer: there is no licensed live feed to poll (see realtime.js), and clearing/rebuilding the marker
+     group every 20 s only to draw the same positions was pure DOM churn. `setAircraftLive()` still redraws
+     immediately if a licensed source is connected later. */
   drawAircraft();
-  trafficTimer = setInterval(drawAircraft, 20000);
 }
 
 /** Rotated ✈ marker icon. */
@@ -371,8 +372,9 @@ export function initMapLayers() {
   subscribeEvents(() => { if (layerState.eventHeat) renderEventHeat(); });
   initTraffic();
   drawSatellites();
-  setInterval(drawSatellites, 15000);
-  setInterval(renderPorts, 300000);
+  /* Satellites move slowly across a world map, and ports/cables are static reference data. Rebuilding those
+     marker groups on a timer produced no new information; they redraw on toggle and when their data changes. */
+  setInterval(drawSatellites, 60 * 1000);
   // Cable geometry is static; only re-draw when the layer is toggled.
 }
 

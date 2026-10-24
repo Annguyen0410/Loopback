@@ -18,7 +18,7 @@ const DEFAULTS = { quakes: 1, military: 0, wildfire: 1, weatherEvents: 1, satell
 // Human labels used by the command palette + toggles.
 export const LAYER_META = [
   { id: "quakes", label: "Earthquakes" },
-  { id: "military", label: "Aircraft (ADS-B)" },
+  { id: "military", label: "Aircraft (ADS-B, paused — source licence)" },
   { id: "wildfire", label: "Natural hazards" },
   { id: "weatherEvents", label: "Storms" },
   { id: "satellites", label: "Satellites & ISS" },

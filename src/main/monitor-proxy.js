@@ -33,7 +33,7 @@ const DEFAULT_COOLDOWN_MS = 60_000;
 const ALLOWED_HOSTS = new Set([
   'earthquake.usgs.gov',
   'eonet.gsfc.nasa.gov',
-  'opensky-network.org',
+  /* No OpenSky host: its terms require a written licence for live-product use. See src/monitor/realtime.js. */
   'api.wheretheiss.at',
   'celestrak.org', 'celestrak.com',
   'api.coingecko.com',

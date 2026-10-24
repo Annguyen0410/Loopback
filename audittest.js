@@ -292,7 +292,12 @@ app.whenReady().then(async () => {
       ipcMain.emit("pip:collapse");
       await wait(600);
       const collapsed = bar.getBounds();
-      check("the popup collapses straight back to a small bar", collapsed.width <= 300 && collapsed.height <= 260, collapsed);
+      /* The bar's real size depends on the saved pipScale and the orientation (vertical 56×248, horizontal
+         280×52 at scale 1). A fixed 300×260 check failed on a profile with a 1.3 scale — 73×322 is still the
+         small bar, not the popup. Bound both shapes at the largest supported scale instead. */
+      check("the popup collapses straight back to a small bar",
+        collapsed.width <= 400 && collapsed.height <= 430 && collapsed.width < expanded.width / 2,
+        { collapsed, expanded });
 
       ipcMain.emit("pip:close");
       const gone = await (async () => { for (let i = 0; i < 20 && findPip(); i++) await wait(150); return !findPip(); })();

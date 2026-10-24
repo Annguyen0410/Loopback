@@ -7,7 +7,8 @@
  */
 
 import { $, esc, safeHref } from "./utils.js";
-import { recordEvents } from "./event-store.js";
+import { allEvents, recordEvents } from "./event-store.js";
+import { ageLabel, headlinesFromEvents } from "./headline-cache.mjs";
 // Shared with the main-process owner of the news feeds so the names in the FEED STATUS panel cannot drift.
 import NEWS_SOURCES from "./news-sources.json" with { type: "json" };
 
@@ -15,6 +16,9 @@ const ALL_SOURCES = NEWS_SOURCES;
 
 let headlines = [];
 let fetchedOnce = false;
+/* True until the live owner in main has pushed a news cycle. A restored list is still real reporting, but it
+   is old, so every place it appears says CACHED instead of implying it just arrived. */
+let cachedOnly = false;
 
 function relAge(ts) {
   if (!ts) return "";
@@ -88,6 +92,7 @@ export function applyLiveNews(parts) {
     }
   }
   if (!out.length) return;
+  cachedOnly = false;
   headlines = out.sort((a, b) => (b.time || 0) - (a.time || 0)).slice(0, 40);
   fetchedOnce = true;
   recordEvents(headlines.map(item => ({
@@ -119,7 +124,10 @@ export function renderNews() {
     html += '<span><span class="news-dot"></span><a href="' + safeHref(it.url) + '" target="_blank" rel="noopener">' +
       mark + esc(it.title) + "</a><span class='news-src'>" + esc(it.source || "") + "</span></span>";
   }
-  el.innerHTML = html + html;
+  const badge = cachedOnly
+    ? '<span class="news-cache" title="Restored from the local event store; the live news feed has not answered yet">CACHED</span>'
+    : "";
+  el.innerHTML = badge + html + html;
 }
 
 export function renderTopSignals() {
@@ -130,6 +138,10 @@ export function renderTopSignals() {
     return;
   }
   let html = "";
+  if (cachedOnly) {
+    html += '<div class="signal-cache" title="Restored from the local event store; the live news feed has not answered yet">' +
+      "CACHED · " + esc(ageLabel(headlines)) + " · waiting for the live feed</div>";
+  }
   for (const h of headlines.slice(0, 8)) {
     const src = (h.kind === "video" ? "▶ " : "") + h.source;
     html += '<div class="signal-row"><span class="signal-src">' + esc(src) + "</span>" +
@@ -142,8 +154,21 @@ export function renderTopSignals() {
 export function initNews() {
   /* The main process owns the news feeds and pushes them over `monitor:live` (applyLiveNews above). The page
      used to fetch all 39 sources itself every five minutes as well, so every feed was downloaded twice — and
-     "duplicated for safety" is just a second source of truth. The ticker shows "Loading top signals…" until
-     the owner's first push arrives. */
+     "duplicated for safety" is just a second source of truth. */
+  /* Before the first push, restore the last session's headlines from the same bounded event store that feeds
+     the timeline and palette. They are labelled CACHED until a live cycle replaces them; a blank ticker while
+     the network is down is more honest than fake data but less useful than real, dated reporting. */
+  if (!headlines.length) {
+    const cached = headlinesFromEvents(allEvents());
+    if (cached.length) {
+      headlines = cached;
+      cachedOnly = true;
+      fetchedOnce = true;
+    }
+  }
   renderTopSignals();
   renderNews();
 }
+
+/** Exposed for the palette/country brief and for tests: true while the list is the restored one. */
+export function isCachedNews() { return cachedOnly; }

@@ -5,9 +5,10 @@ device/profile; do not mark one passed unless it was actually performed on that 
 
 ## Automated (run from the repository root)
 
-- [ ] `npm test` — 82 pure-logic tests: atomic writes, portable janitor, IPC role policy, external-URL rules,
+- [ ] `npm test` — 95 pure-logic tests: atomic writes, portable janitor, IPC role policy, external-URL rules,
       feed scheduler, monitor proxy, chat store, data migration, event model/dedupe, watch rules/cooldowns,
-      trending baselines, event-density cells, CISA advisory normalization and the situation brief.
+      trending baselines, event-density cells, CISA advisory normalization, the situation brief, aggregate
+      feed health and cached-headline restoration.
 - [ ] `npx electron audittest.js` — opens/closes every window, checks the single region picker, and that
       the hidden workspace opens exactly one window without saving its trigger as a chat message.
 - [ ] `npx electron piptest.js` — bubble/bar states, drag, dock, resize, recording HUD.
@@ -17,13 +18,14 @@ device/profile; do not mark one passed unless it was actually performed on that 
 - [ ] `npx electron camtest.js` — camera bubble, pause/resume, camera on/off, burned-in position.
 - [ ] `npx electron combotest.js`, `uitest.js`, `hudtest.js`, `menutest.js`, `traytest.js` — PiP, layout,
       HUD, small-window panel fit, tray/background.
-- [ ] `npx electron monitortest.js` — feed ownership, cadences, honest OFFLINE/STALE states, proxy allowlist.
+- [ ] `npx electron monitortest.js` — feed ownership, cadences, honest OFFLINE/STALE/CACHED states, proxy
+      allowlist, and the restart path that restores cached headlines with the right labels (58 checks).
 - [ ] `npx electron searchtest.js` — global search, diacritics, in-chat marks, quick note. The global
       `Ctrl+Alt+N` check fails if another running app already owns that shortcut; close that app and rerun
       before treating it as a regression.
-- [ ] `npx electron tests/bench-monitor-requests.js 65` — request counter; compare with the numbers in
-      README's *Network and the hidden workspace* section.
-- [ ] `npm run build` — produces `dist\Loopback 1.6.0.exe` and `dist\Loopback Setup 1.6.0.exe`.
+- [ ] `npx electron tests/bench-monitor-requests.js 130` — request counter; compare with the numbers in
+      README's *Network and the hidden workspace* section (2026-10-23 baseline: 155 total, 78 main, 35 renderer).
+- [ ] `npm run build` — produces `dist\Loopback 1.8.0.exe` and `dist\Loopback Setup 1.8.0.exe`.
       The asar must match the working tree (excluding `package.json`, which electron-builder rewrites).
 
 ## First run / data
@@ -53,6 +55,12 @@ device/profile; do not mark one passed unless it was actually performed on that 
 - [ ] There is no visible button, tray item, rail icon or README instruction for the workspace.
 - [ ] Typing the trigger in the composer opens exactly one window, clears the input, and creates no message.
 - [ ] Opening the workspace does not start any feed while it is closed; chat-only use stays idle.
+- [ ] Before the first feed answers, the header says STARTING; with a stored session and no live feed it says
+      CACHED, never LIVE. A mix of live and failed feeds says DEGRADED, and the tooltip states the counts.
+- [ ] TOP SIGNALS and the ticker mark restored headlines CACHED with their age; the first live push removes
+      the mark.
+- [ ] The Aircraft layer is labelled paused and contains no fabricated aircraft; no request goes to
+      `opensky-network.org`.
 - [ ] Closing, hiding or minimizing the workspace stops main's scheduler; reopening resumes once.
 - [ ] Failed feeds show OFFLINE/STALE, never "no events"; static panels show STATIC with their edit date.
 - [ ] Cyber advisories show CISA items with working source links, or an explicit OFFLINE state; WARN means the

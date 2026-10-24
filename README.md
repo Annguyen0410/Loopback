@@ -252,27 +252,40 @@ empty folder: `mkdir assets`.
 feature that uses the internet is the hidden workspace, and only while its window is open.
 
 - It reads **public, key-less sources**: USGS (quakes), GDACS (disasters), GDELT (conflict reports), IODA
-  (outages), NOAA SWPC (space weather), Open-Meteo (weather/air quality), OpenSky, SatNOGS, EONET, World Bank,
+  (outages), NOAA SWPC (space weather), Open-Meteo (weather/air quality), SatNOGS, EONET, World Bank,
   Polymarket, Yahoo Finance quotes, The Space Devs **Launch Library 2** (scheduled launches from its
   rate-limited free tier), **CISA** cyber advisories, and the RSS/Atom feeds of newsrooms listed in
   `src/monitor/news-sources.json`.
+- **Live ADS-B aircraft are paused.** OpenSky's terms require a written licence for REST API use in “any
+  operational capacity — including integration into a live product, service, or automated system”. The old
+  automatic poll was also far outside its anonymous allowance (a global request costs 4 of 400 daily credits;
+  every 45 s would be 7,680/day), so the layer spent much of its time rate-limited. The map layer remains and
+  says it is paused; no aircraft are fabricated, and the drawing path is ready for a licensed feed.
 - Requests that need CORS help go through the main process behind an exact hostname allowlist: **HTTPS only**,
   no credentials in the URL, redirects followed only to another allowlisted host, a **12 s deadline**, an
   **8 MB** body cap, at most **6** requests in flight, and a per-host cooldown after `429`/`5xx` that honours
   `Retry-After` (see `src/main/monitor-proxy.js`). CORS-friendly sources may also be fetched directly by the
   page, but only from the hosts named in its CSP `connect-src` — there is no open origin.
 - **One owner per feed.** The main process owns news, quakes and indices; the page owns weather, air quality,
-  space weather, GDACS, GDELT, IODA, finance and aircraft. The old build fetched the same news, quakes and
+  space weather, GDACS, GDELT, IODA, finance, ISS and EONET. The old build fetched the same news, quakes and
   indices from both sides *and* re-fetched the page's feeds on a 30–60 s signal. Measured with
-  `tests/bench-monitor-requests.js`, opening the monitor for 65 s dropped from **256 to 116 requests**
-  (−55%; main-process requests 220 → 82).
+  `tests/bench-monitor-requests.js` over 130 s with the monitor open, the current tree makes **113 requests
+  (78 main + 35 renderer)** versus **155 (120 + 35)** before this pass — **−27% overall, −35% in the main
+  process**; the earlier duplicate-owner fix had already cut a 65 s run from 256 to 116. The remaining reductions are
+  cadence, not disabled data: Yahoo indices moved from 2 to 5 minutes, ISS from 10 s to 60 s, and
+  OpenSky's unlicensed feed is gone.
 - Closing or hiding the window stops main's scheduler (timers cleared, in-flight requests aborted) and pauses
   the page's timers; showing it again resumes once, without starting a second owner.
 - **Nothing from your chat, files, voice notes, captures or settings is sent to any of these services.**
-- FEED STATUS shows **LIVE / STALE / OFFLINE** with the age of the last successful update and where the fetch
-  happened; curated material (country risk, chokepoints, the scenario model) is labelled **STATIC** with its
-  edit date, never presented as live intelligence. A failed feed renders as unreachable/stale — it is never
-  turned into "no events".
+- FEED STATUS shows **LIVE / STALE / OFFLINE** with the age of the last successful update, the polling
+  cadence, and where the fetch happened; curated material (country risk, chokepoints, the scenario model) is
+  labelled **STATIC** with its edit date, never presented as live intelligence. The header badge is painted
+  from the same statuses — it can say **STARTING, LIVE, DEGRADED, CACHED or OFFLINE**, and never claims LIVE
+  while every feed is down. A failed feed renders as unreachable/stale — it is never turned into "no events".
+- **The last session is visible before the network answers.** Headlines restored from the bounded local event
+  store appear in TOP SIGNALS and the ticker with a **CACHED** label and the age of the newest record; the
+  first live push replaces the label. Opening the workspace offline therefore shows real, dated reporting
+  instead of an empty ticker or a fake "live" state.
 
 ### Inside the hidden workspace
 
@@ -336,8 +349,8 @@ or bubble.
 └── captures\        # screenshots + screen recordings
 ```
 
-`messages.json` and `settings.json` are written atomically (temporary file →
-`rename`), and the previous version is kept as `.bak`. The first launch after
+`messages.json`, `settings.json` and `pip.json` are written atomically (temporary
+file → `rename`), and the previous version is kept as `.bak`. The first launch after
 this schema existed also copies the data files into `backups\<date-time>\`
 and verifies the copies before rewriting anything; that backup is never removed
 by the app. **The folder name stays `messenger-self-chat` on purpose** — it

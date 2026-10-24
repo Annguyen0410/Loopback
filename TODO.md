@@ -1,5 +1,43 @@
 # Cleanup & Verification Log
 
+## v1.8.0 — Monitor truth, offline cache, request budget (23/10)
+
+### Đã sửa (đo được, không đoán)
+- **Header `LIVE` là nhãn cứng** — kể cả khi mọi feed OFFLINE và màn hình trống. Nay `#headerLive` lấy từ
+  `src/monitor/feed-health.mjs`: STARTING / LIVE / DEGRADED / CACHED / OFFLINE, kèm tooltip `x live · y stale ·
+  z offline`. FEED STATUS dùng cùng một hàm nên hai chỗ không thể nói khác nhau.
+- **Tin cũ mất sau khi đóng Monitor** — event store đã lưu NEWS nhưng `news.js` chỉ giữ biến RAM, nên mở lại
+  (hoặc offline) thấy ticker trống dù timeline/palette có tin. Nay `headline-cache.mjs` dựng lại headline từ
+  store, chỉ nhận link `https`, gắn nhãn **CACHED + tuổi tin**, và nhãn biến mất khi push live đầu tiên tới.
+- **Nhịp poll vượt hạn mức nguồn** — Yahoo indices 2 phút → **5 phút** (29 request/lần); ISS 10 s → **60 s**.
+  OpenSky **dừng hẳn**: điều khoản của họ yêu cầu licence bằng văn bản cho REST API trong “live product”, và
+  poll 45 s toàn cầu tốn 7.680 credit/ngày so với 400 credit anonymous. Layer vẫn còn, ghi `Aircraft ⏸` +
+  lý do; không vẽ máy bay giả; host đã bị bỏ khỏi proxy allowlist.
+- **Vẽ lại layer tĩnh vô ích** — ports 5 phút/lần, aircraft 20 s/lần, satellites 15 s/lần. Nay ports/cables chỉ
+  vẽ khi bật layer, satellites 60 s, không còn timer aircraft.
+- **pip.json ghi thẳng** — chuyển sang `atomic-write` (temp + rename + `.bak`), và `settings:save` phát lại
+  đúng document đã lưu cho các cửa sổ khác thay vì bản trong RAM của cửa sổ gửi.
+
+### Kiểm chứng
+- [x] `npm test` → **95 passed, 0 failed** (thêm 13 test feed-health + headline-cache).
+- [x] `npx electron monitortest.js` → **58 passed, 0 failed**, `CONSOLE-ERRORS []`. Nhóm mới: seed một NEWS
+  record, reload, xoá toàn bộ feed status → TOP SIGNALS + ticker + header đều nói CACHED.
+- [x] `npx electron tests/bench-monitor-requests.js 130` → **155 → 113 request (−27%)**, main **120 → 78
+  (−35%)**; Yahoo 58→29, ISS 13→3, OpenSky 3→0. Renderer 35→35 (24 là tile ArcGIS của bản đồ).
+- [x] `AUDITTEST_USERDATA=<temp> npx electron audittest.js` → **RESULT PASS** (sửa check bong bóng thu gọn
+  theo scale/orientation thay vì chốt 300×260; profile thật không dùng cho lần cuối).
+- [x] `npm run build` → **BUILD_EXIT=0**, `dist\Loopback 1.8.0.exe` (150.174.461 B,
+  SHA-256 `a8911be5…`) + `dist\Loopback Setup 1.8.0.exe` (103.882.257 B, SHA-256 `8055fb5d…`);
+  asar **119 file trùng byte** với source, chỉ `package.json` bị electron-builder rewrite (1.8.0).
+- [x] Chạy thật bản packaged cuối với profile vứt đi (`--autostart`): **5 process con, Responding=True,
+  không có error.log**, tạo `messages.json`/`meta.json`/`pip.json`.
+- [x] Không thêm nút/menu Monitor nào; `/world` vẫn là lối vào duy nhất.
+- [ ] Chưa push/release (theo yêu cầu của prompt major-update này).
+- [!] `npx electron piptest.js` với profile tạm: mọi check chức năng PASS, nhưng check pixel
+  “screenshot holds no trace of the floating bubble” FAIL (12997/13888 magenta) vì app Loopback thật của
+  bạn đang chạy và cửa sổ của nó nằm trong vùng chụp. Đây là môi trường test, không phải hồi quy code;
+  chạy lại sau khi đóng app thật.
+
 ## v1.5.5 — %TEMP% phình, mất dữ liệu khi ghi dở, kéo bong bóng lần đầu (18/10)
 
 ### Bối cảnh (bạn báo)

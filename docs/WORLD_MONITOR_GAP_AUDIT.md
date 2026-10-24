@@ -90,3 +90,81 @@ Verification for the follow-up:
   panel, SITREP render, saved-event UI and the event-density layer with stubbed feeds.
 - `npm run build` — Windows portable + NSIS artifacts from this tree (see the release record).
 - The hidden `/world` entry point and single-window behavior are unchanged; no Monitor button was added.
+
+## v1.8 follow-up — truth, cache and request budget (2026-10-23)
+
+This pass audited the shipped 1.7.0 tree again (`2ebe4b2`) and fixed four things a competitive feature list does
+not show. No new feed was added; the work was about whether the screen can be believed and what it costs.
+
+| Change | Why it matters | Evidence |
+|---|---|---|
+| Header badge is derived from feed health | It used to be a hard-coded red `LIVE` badge, even with every feed offline and nothing on screen. A monitor whose first claim is false is not trustworthy. | `src/monitor/feed-health.mjs`, `net.js`; states STARTING / LIVE / DEGRADED / CACHED / OFFLINE; unit tests cover all six transitions |
+| Cached headlines survive a restart | The event store persisted NEWS records, but the ticker/TOP SIGNALS kept only a module variable. Offline start showed an empty news area although the timeline and palette had the stories. | `headline-cache.mjs`, `news.js`; restored links must be https, list is labelled **CACHED** with the newest record's age, first live push clears the label |
+| Poll cadence tied to source limits | Yahoo's undocumented quote endpoint was called 29 times every 2 min (870/h); ISS was 10 s; a global OpenSky request every 45 s would spend 7,680 credits/day against 400 anonymous credits. | `src/main/monitor-scheduler.js` (indices 5 min), `realtime.js` (ISS 60 s), OpenSky removed; measured below |
+| Static layers stop redrawing on timers | Ports are a fixed list and satellites move slowly; `renderPorts` every 5 min and the aircraft group every 20 s rebuilt identical markers. | `map-layers.js`: ports/cables redraw on toggle, satellites 60 s, no aircraft timer |
+
+### ADS-B licence decision (removal, not a pretend fallback)
+
+OpenSky's General Terms of Use (read 2026-10-23, <https://opensky-network.org/about/terms-of-use>) require a
+written licence for REST API use in *any* operational capacity — “including integration into a live product,
+service, or automated system” — regardless of non-profit status. The REST docs also state 400 anonymous
+credits/day and 4 credits for a global `states/all` request. The old 45 s poll asked for **1,920 requests /
+7,680 credits per day**, so it was both unlicensed for this product and guaranteed to be rate-limited.
+
+Result: the live aircraft source is **paused**. The layer toggle remains and is labelled `Aircraft ⏸` with the
+licence reason; the renderer code is retained for a future licensed source. No aircraft, positions or counts are
+invented, and `opensky-network.org` was removed from the proxy allowlist. Restoring it requires a licence and a
+deliberate code change, not an environment variable.
+
+### Request budget (measured, not estimated)
+
+`npx electron tests/bench-monitor-requests.js 130` — real app, throwaway profile, monitor open for 130 s:
+
+| | Before (1.7.0) | After (this pass) | Change |
+|---|---:|---:|---:|
+| Main process | 120 | 78 | −35% |
+| Renderer | 35 | 35 | 0% |
+| **Total** | **155** | **113** | **−27%** |
+| Per minute | 71.5 | 52.2 | −27% |
+
+Per-host changes: Yahoo 58 → 29, wheretheiss.at (ISS) 13 → 3, OpenSky 3 → 0. News, quakes, weather, GDACS,
+GDELT, IODA, tiles and CISA were unchanged. The renderer total is dominated by 24 ArcGIS tile requests; those
+are the map itself, not a poll.
+
+### What was deliberately not added
+
+- **No replacement ADS-B feed.** adsb.lol's documented open API is marked deprecated in favour of a feeder-key
+  API; airplanes.live now gates API access; AvioADSB is free for personal projects, which is not the same as a
+  distributed desktop product. None was verified well enough to ship under its terms.
+- **No full quake payload in localStorage.** Headlines are small and bounded; a USGS payload plus cached map
+  geometry would compete with the 5 MB profile quota for a feature the live scheduler refreshes in 2 minutes.
+- **No new feed count.** The remaining gaps are quality gaps (offline cache, provenance, request budget), not
+  a missing RSS URL.
+
+### Verification
+
+- `npm test` — **95 passed, 0 failed** (13 new: six feed-health transitions, seven cache normalisation/age
+  cases). Includes the unchanged scheduler/proxy/store suites.
+- `npx electron monitortest.js` — **58 passed, 0 failed**, `CONSOLE-ERRORS []`. The new group seeds a stored
+  headline, reloads the page, deletes every live feed status and proves TOP SIGNALS, the ticker and the header
+  all say CACHED.
+- `npx electron tests/bench-monitor-requests.js 130` — table above, exit 0.
+- `/world` remains the only entry point; no Monitor button, tray item or README instruction was added.
+
+### Build record (2026-10-23)
+
+- `npm run build` → **exit 0**. `dist\Loopback 1.8.0.exe` **150,174,461 B**, SHA-256
+  `a8911be571e0b5dd0f6b2e0b257beb8c66839963439d3d5475b73636b68bbaaf`; `dist\Loopback Setup 1.8.0.exe`
+  **103,882,257 B**, SHA-256 `8055fb5de687021a1fe6db8056cbb5b996adf1f25b6176821fb2a2cd20eb04d2`.
+- Packaged `app.asar`: **119 files byte-identical** to the working tree; only `package.json` differs because
+  electron-builder rewrites it (version **1.8.0**, name still `messenger-self-chat`). Both new `.mjs` modules are
+  present, so the packaged build is the code that passed the tests above.
+- Final packaged smoke test with a throwaway profile and `--autostart`: parent `Responding=True`, **5 child
+  processes**, **no `error.log`**, `messages.json`/`meta.json`/`pip.json` initialised. No chat window was
+  requested; the hidden workspace was not opened.
+- `AUDITTEST_USERDATA=<temp> npx electron audittest.js` → **RESULT PASS** (the collapsed-bar assertion now
+  accounts for the saved scale/orientation instead of assuming a 300×260 default). The first audit run used the
+  default profile by mistake; it only emitted normal PiP state messages and did not delete data.
+- `piptest.js` functional checks pass with a temp profile, but its pixel check reports 93.6% magenta while this
+  machine's real Loopback instance is running; that window can appear in the captured region. It is an
+  environment conflict, not a code path changed here. Re-run with Loopback closed for a clean pixel result.

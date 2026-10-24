@@ -29,13 +29,14 @@
  *   news    5 min — publishers post at minute-to-hour scale; 39 feeds × 12/hour is already ~470 requests/hour.
  *   quakes  2 min — the USGS all_day summary itself only refreshes every ~5 min, so 2 min is faster than the
  *                   data; 20 s was five times faster than the feed could possibly change.
- *   indices 2 min — a glanceable ticker, not an execution feed. 60 s would double 28 symbol requests for a
- *                   number that has not moved.
+ *   indices 5 min — a glanceable ticker, not an execution feed, and `https.get` is an **undocumented** Yahoo
+ *                   endpoint: 29 symbols every 2 min was 870 requests/hour for numbers that move slowly. 5 min
+ *                   is 348/hour and still fresher than a market panel needs to be.
  */
 const FEED_CADENCE = {
   news: 5 * 60 * 1000,
   quakes: 2 * 60 * 1000,
-  indices: 2 * 60 * 1000
+  indices: 5 * 60 * 1000
 };
 
 /** Requests a feed may take before it gets a deadline. */

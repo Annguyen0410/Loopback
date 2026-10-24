@@ -109,14 +109,16 @@ const PIP_CHAT = { w: 430, h: 700 };
 const PIP_CFG = () => path.join(app.getPath("userData"), "pip.json");
 
 function loadPipCfg() {
-  try { return JSON.parse(fs.readFileSync(PIP_CFG(), "utf8")); } catch { return {}; }
+  // Same atomic reader as the store: a torn pip.json is recovered from its .bak instead of silently resetting
+  // the bar's saved position/orientation.
+  const value = atomic.readJsonSync(PIP_CFG(), {});
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 function savePipCfg(patch) {
   try {
     const cur = loadPipCfg();
     Object.assign(cur, patch || {});
-    fs.mkdirSync(path.dirname(PIP_CFG()), { recursive: true });
-    fs.writeFileSync(PIP_CFG(), JSON.stringify(cur), "utf8");
+    atomic.writeFileAtomicSync(PIP_CFG(), JSON.stringify(cur));
   } catch {}
 }
 function pipScale() {
@@ -546,6 +548,13 @@ function registerHandlers() {
       const next = Object.assign({}, cur, d || {});
       if (d && typeof d.sidebarCollapsed === "boolean") next.sidebarCollapsed = d.sidebarCollapsed;
       saveCfg(next);
+      /* The stored document is the truth, and every other window gets exactly that — not the sender's copy.
+         Without this, a stale window could keep showing a toggle that was never written. */
+      const saved = loadCfg();
+      BrowserWindow.getAllWindows().forEach(w => {
+        if (w.isDestroyed() || w.webContents === e.sender) return;
+        try { w.webContents.send("settings:changed", saved); } catch {}
+      });
       return { ok: true };
     } catch { return { ok: false }; }
   });
@@ -2018,13 +2027,6 @@ function registerHandlers() {
     BrowserWindow.getAllWindows().forEach(w => {
       if (!w.isDestroyed() && w.webContents !== e.sender) {
         w.webContents.send("state:changed", data);
-      }
-    });
-  });
-  ipcMain.on("settings:broadcast", (e, data) => {
-    BrowserWindow.getAllWindows().forEach(w => {
-      if (!w.isDestroyed() && w.webContents !== e.sender) {
-        w.webContents.send("settings:changed", data);
       }
     });
   });

@@ -84,7 +84,6 @@ contextBridge.exposeInMainWorld("api", {
   /* Realtime cross-window sync */
   broadcastState: d => ipcRenderer.send("state:broadcast", d),
   onStateChanged: cb => ipcRenderer.on("state:changed", (e, d) => cb(d)),
-  broadcastSettings: d => ipcRenderer.send("settings:broadcast", d),
   onSettingsChanged: cb => ipcRenderer.on("settings:changed", (e, d) => cb(d)),
 
   /* Screenshots + screen recordings + media library */

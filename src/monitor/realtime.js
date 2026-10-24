@@ -1,35 +1,22 @@
 /**
- * Realtime feeds that sharpen the map: real aircraft (OpenSky ADS-B), real
- * ISS telemetry (wheretheiss.at) and real natural hazards (NASA EONET).
+ * Realtime feeds that sharpen the map: real ISS telemetry (wheretheiss.at)
+ * and real natural hazards (NASA EONET).
  *
  * These go through fetchJSON so each one registers in the FEED STATUS panel
  * and the panel can tell "no data" apart from "no source". When a source is
  * down the layer is simply left empty — nothing is simulated.
+ *
+ * The aircraft layer is intentionally NOT polled. OpenSky's terms require a written licence for use of the REST
+ * API in "any operational capacity — including integration into a live product, service, or automated system",
+ * regardless of the entity's non-profit status (https://opensky-network.org/about/terms-of-use, read 2026-10-23).
+ * The old 45 s poll also spent 4 credits on every global `states/all` request: 7,680 credits/day against the
+ * anonymous 400/day allowance, so the layer spent most of its life rate-limited. Until a licensed source exists,
+ * the layer stays empty and the map layer label says so. The drawing code in map-layers.js remains, so a
+ * licensed feed can be connected with one setter — no fabricated aircraft are shown in the meantime.
  */
 
 import { fetchJSON } from "./net.js";
-import { setAircraftLive, setISS, setHazards } from "./map-layers.js";
-
-/* ---------- Aircraft (OpenSky anonymous state vectors) ---------- */
-export async function fetchRealAircraft() {
-  try {
-    // direct:false — OpenSky/eonet/wheretheiss send no CORS headers, so go
-    // straight through the main-process proxy instead of logging a CSP/CORS
-    // error on every poll.
-    const r = await fetchJSON("opensky", "https://opensky-network.org/api/states/all", { timeout: 25000, direct: false });
-    if (r && Array.isArray(r.states)) {
-      const states = r.states
-        .map(s => ({
-          call: (s[1] || "").trim(),
-          lng: s[5], lat: s[6], alt: s[7], vel: s[9], heading: s[10]
-        }))
-        .filter(s => s.lat != null && s.lng != null);
-      setAircraftLive(states.length ? states : null);
-      return;
-    }
-  } catch { /* rate-limited or offline → empty layer */ }
-  setAircraftLive(null);
-}
+import { setISS, setHazards } from "./map-layers.js";
 
 /* ---------- ISS (wheretheiss.at) ---------- */
 export async function fetchISS() {
@@ -62,7 +49,10 @@ export async function fetchEONET() {
 }
 
 export function initRealtime() {
-  fetchRealAircraft();  setInterval(fetchRealAircraft, 45 * 1000);
-  fetchISS();           setInterval(fetchISS, 10 * 1000);
-  fetchEONET();         setInterval(fetchEONET, 30 * 60 * 1000);
+  /* ISS: 60 s is well inside wheretheiss.at's 1 req/s limit and four times less traffic than the old 10 s
+     timer. The station moves ~0.47 km/s, so a 60 s pin is already 28 km behind the real position; a faster
+     timer buys nothing visible on a world map. */
+  fetchISS();   setInterval(fetchISS, 60 * 1000);
+  /* EONET publishes open events at a natural-hazard cadence, not a live ticker. */
+  fetchEONET(); setInterval(fetchEONET, 30 * 60 * 1000);
 }

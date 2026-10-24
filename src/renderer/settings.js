@@ -8,8 +8,9 @@ import { toast } from "./toast.js";
 import { confirmDialog } from "./dialog.js";
 
 export function saveCfg() {
-  // Keep every open window's theme/dark mode in sync.
-  if (window.api.broadcastSettings) window.api.broadcastSettings({ ...settings });
+  /* Main writes the merged document and then broadcasts exactly what it stored. Sending the renderer's copy
+     first (the old behavior) could push an unsaved value — or a stale one from a different window — to every
+     other window and flash a theme that was about to be replaced. */
   return window.api.saveSettings(settings);
 }
 

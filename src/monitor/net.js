@@ -9,16 +9,73 @@
  */
 
 import { proxyFetch } from "./bridge.js";
+import { summariseFeeds } from "./feed-health.mjs";
+import { headlinesFromEvents } from "./headline-cache.mjs";
+import { allEvents } from "./event-store.js";
 
-export const FEEDS = {}; // name -> { name, status, lastOk, lastErr, count, latency }
+export const FEEDS = {}; // name -> { name, status, lastOk, lastErr, count, latency, everyMs }
+
+/* How often the PAGE asks each feed. This is display only — the timer lives next to the fetcher — but the FEED
+   STATUS tooltip can then state the cadence instead of leaving the user to guess, and a cadence that no longer
+   matches the code is visible in one place. The main-process feeds report their own cadence with each status. */
+const CADENCE_MS = {
+  news: 5 * 60 * 1000,
+  quakes: 2 * 60 * 1000,
+  indices: 5 * 60 * 1000,
+  weather: 3 * 60 * 1000,
+  gdacs: 5 * 60 * 1000,
+  gdelt: 5 * 60 * 1000,
+  ioda: 10 * 60 * 1000,
+  airq: 5 * 60 * 1000,
+  "space.kp": 10 * 60 * 1000,
+  "space.plasma": 10 * 60 * 1000,
+  "space.mag": 10 * 60 * 1000,
+  "space.flux": 10 * 60 * 1000,
+  launches: 10 * 60 * 1000,
+  iss: 60 * 1000,
+  eonet: 30 * 60 * 1000,
+  "cisa-advisories": 15 * 60 * 1000,
+  "finance.crypto": 3 * 60 * 1000,
+  "finance.cg": 3 * 60 * 1000,
+  "finance.fg": 5 * 60 * 1000,
+  "finance.poly": 2 * 60 * 1000,
+  "port.weather": 5 * 60 * 1000,
+  satellites: 6 * 60 * 60 * 1000
+};
+
+let renderedFeedHtml = "";
 
 function now() { return Date.now(); }
+
+function everyLabel(ms) {
+  if (!ms) return "";
+  if (ms < 60_000) return Math.round(ms / 1000) + "s";
+  if (ms % 3_600_000 === 0) return Math.round(ms / 3_600_000) + "h";
+  return Math.round(ms / 60_000) + "m";
+}
+
+function hasCachedHeadlines() {
+  /* Count only headlines that could actually be rendered (https link, title), so the badge never promises a
+     cache the news panel cannot show. */
+  try { return headlinesFromEvents(allEvents(), { limit: 1 }).length > 0; } catch { return false; }
+}
+
+/** The header badge is a claim, so it is painted from the same statuses as the panel. */
+function paintHeaderHealth(summary) {
+  const el = document.getElementById("headerLive");
+  if (!el) return;
+  el.className = "header-live " + summary.state;
+  el.title = summary.title;
+  el.setAttribute("aria-label", summary.label + " — " + summary.title);
+  el.innerHTML = '<span class="live-dot"></span>' + summary.label;
+}
 
 function record(name, ok, err, latency) {
   const f = FEEDS[name] || (FEEDS[name] = {
     name, status: "OFFLINE", lastOk: 0, lastErr: "", count: 0, latency: 0,
-    source: "page", lastAttempt: 0, fails: 0, lastErrAt: 0
+    source: "page", lastAttempt: 0, fails: 0, lastErrAt: 0, everyMs: CADENCE_MS[name] || 0
   });
+  if (!f.everyMs) f.everyMs = CADENCE_MS[name] || 0;
   f.latency = latency;
   f.source = "page";
   f.lastAttempt = now();
@@ -52,6 +109,7 @@ export function noteFeedStatus(update) {
   f.status = update.status || f.status;
   if (update.lastOk) f.lastOk = update.lastOk;
   if (update.lastAttempt) f.lastAttempt = update.lastAttempt;
+  if (Number.isFinite(update.everyMs)) f.everyMs = update.everyMs;
   if (Number.isFinite(update.failures)) f.fails = update.failures;
   f.lastErr = String(update.lastErr || "").slice(0, 120);
   if (f.lastErr) f.lastErrAt = now();
@@ -113,6 +171,9 @@ export async function fetchJSON(name, url, { proxy = true, direct = true, timeou
 /* ---------- FEED STATUS panel ---------- */
 
 export function renderFeedStatus() {
+  const summary = summariseFeeds(FEEDS, { now: now(), hasCache: hasCachedHeadlines() });
+  paintHeaderHealth(summary);
+
   const el = document.getElementById("feedStatusList");
   if (!el) return;
   const keys = Object.keys(FEEDS).sort();
@@ -125,7 +186,9 @@ export function renderFeedStatus() {
     const age = f.lastOk ? Math.round((now() - f.lastOk) / 1000) : null;
     const ageStr = age == null ? "never" : age < 60 ? age + "s" : Math.round(age / 60) + "m";
     const latency = f.latency ? " · " + Math.round(f.latency) + "ms" : "";
+    const every = everyLabel(f.everyMs);
     const title = (f.source === "main" ? "Fetched by the app's single owner" : "Fetched by this page") +
+      (every ? " every " + every : "") +
       " · last success " + (age == null ? "never" : ageStr + " ago") +
       (f.lastErr ? " · last error: " + f.lastErr : " · no error") +
       (f.fails ? " · " + f.fails + " consecutive failure(s)" : "");
@@ -142,7 +205,10 @@ export function renderFeedStatus() {
       '<span class="fs-meta">static · ' + esc(s.updated) + '</span>' +
       '</div>';
   }
+  // Avoid replacing the panel every 30 s when nothing changed: each replacement is a reflow in a small panel.
+  if (html === renderedFeedHtml) return;
+  renderedFeedHtml = html;
   el.innerHTML = html;
 }
-// keep the panel fresh even between polls
-setInterval(renderFeedStatus, 10000);
+// keep the panel (and the header claim) fresh even between polls
+setInterval(renderFeedStatus, 30000);

@@ -20,7 +20,7 @@
   <!-- ================= HEADER ================= -->
   <div class="header" role="banner">
     <span class="header-title">WORLD MONITOR</span>
-    <span class="header-live" title="Live data feeds active"><span class="live-dot"></span>LIVE</span>
+    <span class="header-live starting" id="headerLive" title="Waiting for the first feed status"><span class="live-dot"></span>STARTING</span>
     <span class="header-clock" id="clock" aria-live="off">--:--:-- UTC</span>
     <span class="header-date" id="headerDate"></span>
     <span class="header-time" id="updateTime" aria-live="polite"></span>
@@ -282,7 +282,7 @@
     </div>
     <div class="layer-divider" aria-hidden="true"></div>
     <label class="layer-toggle"><input type="checkbox" data-layer="quakes" checked> <span class="layer-dot" style="background:#ff6600"></span>Quakes</label>
-    <label class="layer-toggle"><input type="checkbox" data-layer="military"> <span class="layer-dot" style="background:#0088ff"></span>Aircraft ◉</label>
+    <label class="layer-toggle" title="Live ADS-B is paused: OpenSky requires a written licence for use in a live product. No aircraft are fabricated."><input type="checkbox" data-layer="military"> <span class="layer-dot" style="background:#0088ff"></span>Aircraft ⏸</label>
     <label class="layer-toggle"><input type="checkbox" data-layer="wildfire"> <span class="layer-dot" style="background:#ff4444"></span>Hazards ◉</label>
     <label class="layer-toggle"><input type="checkbox" data-layer="satellites"> <span class="layer-dot" style="background:#888"></span>ISS</label>
     <label class="layer-toggle"><input type="checkbox" data-layer="cables"> <span class="layer-dot" style="background:#ff4488"></span>Cables</label>

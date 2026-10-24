@@ -118,7 +118,6 @@ const ROLE_CHANNELS = {
 
   /* Cross-window sync is a chat-window concern. */
   'state:broadcast': CHAT,
-  'settings:broadcast': CHAT,
 
   /* World Monitor. The proxy and the machine panels are monitor-only: the chat window has no business
      reading system information or fetching arbitrary (allowlisted) URLs on a page's behalf. */

@@ -413,6 +413,41 @@ app.whenReady().then(async () => {
     ok(r.heat && r.heat.markers >= 1, "event-density layer draws a cell from geolocated records", r.heat);
   });
 
+  /* Cache-first restart: the header used to claim LIVE even with no data at all. Seed the same store a
+     previous session would have left, reload, and check that the restored list and the badge both say CACHED. */
+  test("cache-first headlines and an honest header after a restart", async () => {
+    await j(`(async () => {
+      const es = await import("./src/monitor/event-store.js");
+      es.clearEvents();
+      es.recordEvent({
+        category: "NEWS", severity: "info", title: "Restored test headline",
+        url: "https://example.com/restored", source: "Cache Test",
+        eventTime: Date.now() - 5 * 60 * 1000, observedAt: Date.now() - 5 * 60 * 1000
+      });
+    })()`);
+    const loaded = new Promise(resolve => win.webContents.once("did-finish-load", resolve));
+    win.reload();
+    await loaded;
+    await new Promise(resolve => setTimeout(resolve, 1400));
+    const r = await j(`(async () => {
+      const net = await import("./src/monitor/net.js");
+      for (const key of Object.keys(net.FEEDS)) delete net.FEEDS[key];
+      net.renderFeedStatus();
+      const badge = document.getElementById("headerLive");
+      return {
+        signals: document.getElementById("topSignals").textContent,
+        ticker: document.getElementById("newsTrack").textContent,
+        badgeText: badge.textContent,
+        badgeClass: badge.className,
+        badgeTitle: badge.title
+      };
+    })()`);
+    ok(/Restored test headline/.test(r.signals), "stored headlines return after a restart", r.signals.slice(0, 160));
+    ok(/CACHED/.test(r.signals) && /CACHED/.test(r.ticker), "restored headlines are labelled CACHED in both places", { signals: r.signals.slice(0, 80), ticker: r.ticker.slice(0, 80) });
+    ok(/CACHED/.test(r.badgeText) && /cached/.test(r.badgeClass) && /earlier session/.test(r.badgeTitle),
+      "the header says CACHED instead of a hard-coded LIVE", r);
+  });
+
   /* run everything sequentially */
   console.log("\n== monitortest: " + tests.length + " groups ==");
   for (const t of tests) {
