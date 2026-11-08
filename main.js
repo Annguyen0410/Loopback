@@ -321,11 +321,17 @@ function closeShotReview() {
  * Returns false when the file is not there, so the caller can still fall back
  * to a toast.
  */
-function openShotReview(name) {
+function openShotReview(name, knownSize) {
   const src = safeCap(name);
   if (!src || !fs.existsSync(src)) return false;
-  let size = { width: 0, height: 0 };
-  try { size = nativeImage.createFromPath(src).getSize(); } catch {}
+  /* The crop's size is already in hand when the shot is saved, so the card must
+     not decode the whole PNG again just to size itself — that read (and decode)
+     blocked the main process on every screenshot. Only a review opened without
+     a size falls back to reading the file. */
+  let size = knownSize && knownSize.width && knownSize.height
+    ? { width: knownSize.width, height: knownSize.height }
+    : { width: 0, height: 0 };
+  if (!size.width) { try { size = nativeImage.createFromPath(src).getSize(); } catch {} }
   try {
     if (reviewWin && !reviewWin.isDestroyed()) reviewWin.close();
   } catch {}
@@ -980,26 +986,17 @@ function registerHandlers() {
     let overlayUp = false;
     shotCancelled = false;
     try {
-      parkOverlaysForShot();
-      if (shotParkedWins.length) await new Promise(r => setTimeout(r, 80));
       const pt = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
       const dpr = pt.scaleFactor || 1;
-      const sources = await desktopCapturer.getSources({
-        types: ["screen"],
-        thumbnailSize: {
-          width: Math.round(pt.size.width * dpr),
-          height: Math.round(pt.size.height * dpr)
-        }
-      });
-      const src = sources.find(s => String(s.display_id) === String(pt.id)) || sources[0];
-      if (!src || !src.thumbnail || src.thumbnail.isEmpty()) {
-        restoreShotOverlays(); // nothing will show a region picker — don't leave the bubble hidden
-        return { ok: false, error: "no-source" };
-      }
-      shotImage = src.thumbnail;
       // Overlay must match the captured display bounds (not just workArea),
       // so selection coordinates map 1:1 onto the screenshot pixels.
       const b = pt.bounds;
+      /* The picker window and its page are built FIRST, in parallel with the
+         screen grab — they do not depend on it at all. Doing one after the
+         other was the largest chunk of "press Screenshot and wait": a cold
+         window plus page load costs up to 1.6 s here, and
+         desktopCapturer.getSources costs 0.6–3 s. The window stays hidden until
+         the frozen screen is on its page, so nothing of it lands in the grab. */
       shotWin = new BrowserWindow({
         x: b.x, y: b.y, width: b.width, height: b.height,
         frame: false, transparent: false, resizable: false, movable: false,
@@ -1021,10 +1018,6 @@ function registerHandlers() {
          left to close it — close the window instead. */
       const thisPicker = shotWin;
       thisPicker.webContents.on("render-process-gone", () => closeShotPicker(thisPicker));
-      /* A page that never reports back must not leave the user with no picker at
-         all (the bubble is parked off-screen meanwhile): show it anyway. */
-      const pickerShown = setTimeout(() => showShotPicker(thisPicker), 2500);
-      thisPicker.on("closed", () => clearTimeout(pickerShown));
       // Windows clamps a new window to the WORK area (taskbar excluded), so the
       // picker came out 48px short of the screen it had just grabbed: the bottom
       // strip could not be selected, and the overlay no longer matched the
@@ -1040,18 +1033,44 @@ function registerHandlers() {
         shotWin = null; shotImage = null;
         restoreShotOverlays();
       });
-      const dataUrl = "data:image/png;base64," + shotImage.toPNG().toString("base64");
-      await shotWin.loadFile(path.join(__dirname, "shot-overlay.html"), {
-        query: {
-          w: String(b.width),
-          h: String(b.height),
-          imgW: String(shotImage.getSize().width),
-          imgH: String(shotImage.getSize().height)
+      /* The page only needs the display bounds for its layout; the frozen
+         screen's pixel size arrives with shot:ready, once the grab is done. */
+      const pageLoaded = shotWin.loadFile(path.join(__dirname, "shot-overlay.html"), {
+        query: { w: String(b.width), h: String(b.height) }
+      }).catch(() => {});
+
+      parkOverlaysForShot();
+      if (shotParkedWins.length) await new Promise(r => setTimeout(r, 80));
+      const sources = await desktopCapturer.getSources({
+        types: ["screen"],
+        thumbnailSize: {
+          width: Math.round(pt.size.width * dpr),
+          height: Math.round(pt.size.height * dpr)
         }
       });
-      // Page scripts have registered shot:ready by now (did-finish-load).
+      const src = sources.find(s => String(s.display_id) === String(pt.id)) || sources[0];
+      if (!src || !src.thumbnail || src.thumbnail.isEmpty()) {
+        restoreShotOverlays(); // nothing will show a region picker — don't leave the bubble hidden
+        closeShotPicker(thisPicker); // the page is already loading; it must not outlive the failure
+        return { ok: false, error: "no-source" };
+      }
+      shotImage = src.thumbnail;
+      const shotSize = shotImage.getSize();
+      const dataUrl = "data:image/png;base64," + shotImage.toPNG().toString("base64");
+      await pageLoaded;
       if (shotWin && !shotWin.isDestroyed()) {
-        shotWin.webContents.send("shot:ready", { dataUrl });
+        shotWin.webContents.send("shot:ready", {
+          dataUrl,
+          imgW: String(shotSize.width),
+          imgH: String(shotSize.height)
+        });
+        /* A page that never reports back must not leave the user with no picker
+           at all (the bubble is parked off-screen meanwhile): show it anyway.
+           This fallback starts HERE, not at window creation — the page is now
+           built in parallel, so starting it earlier would fire while the grab
+           is still running and put a black screen in front of the user. */
+        const pickerShown = setTimeout(() => showShotPicker(thisPicker), 2500);
+        thisPicker.on("closed", () => clearTimeout(pickerShown));
       }
       return { ok: true };
     } catch (e) {
@@ -1304,12 +1323,13 @@ function registerHandlers() {
       ensure();
       const name = `${shotStamp()}-shot.png`;
       fs.writeFileSync(path.join(CAPDIR(), name), cropped.toPNG());
+      const cropSize = cropped.getSize();
       closeShotPickers(sender);
       /* The review window IS the feedback for a screenshot: preview + Download
          in the face of the user, instead of "Screenshot saved ✓" and a hunt
          through the media library. Everything else is told a capture landed so
          an open gallery refreshes. */
-      const reviewed = openShotReview(name);
+      const reviewed = openShotReview(name, cropSize);
       BrowserWindow.getAllWindows().forEach(w => {
         if (w.isDestroyed() || w === reviewWin) return;
         try { w.webContents.send("capture:saved", { name, kind: "image", review: reviewed }); } catch {}
@@ -2421,25 +2441,35 @@ app.whenReady().then(() => {
   // the cursor so the user isn't stuck in a Chromium picker. Only the chat window/bar may ask, and only
   // from a user gesture; the monitor cannot start a recording.
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    /* Chromium's callback must be answered EXACTLY once. The deny path used to
+       pass `{ video: undefined }`, which throws inside the answer call, lands in
+       the catch below and answers a SECOND time — so a capture refused for a
+       plain reason (no user gesture) came back as "display capture failed" and
+       a second answer was reported as an unhandled rejection. */
+    let answered = false;
+    const answer = video => {
+      if (answered) return;
+      answered = true;
+      try { callback(video ? { video } : {}); }
+      catch (e) { console.warn("[display-media] answer failed:", (e && e.message) || e); }
+    };
     try {
       const role = request && request.frame ? roleForUrl(request.frame.url, __dirname) : null;
       const gesture = !request || request.userGesture !== false;
       const topFrame = !request || !request.frame || request.frame.parent == null;
       if (!gesture || !topFrame || (role !== "chat" && role !== "pip")) {
         console.warn("[Main] display capture denied for", role || "untrusted", gesture ? "" : "(no user gesture)");
-        return callback({ video: undefined });
+        return answer(null);
       }
       const pt = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
       const sources = await desktopCapturer.getSources({
         types: ["screen"],
         thumbnailSize: { width: 0, height: 0 }
       });
-      const match = sources.find(s => String(s.display_id) === String(pt.id)) || sources[0];
-      if (match) callback({ video: match });
-      else callback({ video: undefined });
+      answer(sources.find(s => String(s.display_id) === String(pt.id)) || sources[0] || null);
     } catch (err) {
       console.error("[display-media]", err);
-      callback({ video: undefined });
+      answer(null);
     }
   });
 

@@ -91,7 +91,13 @@ const SETUP = `
 
     window.__camOpen = 0;
     navigator.mediaDevices.getDisplayMedia = async () => new MediaStream(screen.captureStream(20).getVideoTracks());
-    navigator.mediaDevices.getUserMedia = async () => {
+    /* The recorder asks for the microphone and the camera with SEPARATE
+       requests (so a slow camera cannot hold the start), which means only a
+       request that asks for a camera is a camera open — counting every call
+       would count the microphone as one. There is no microphone here, exactly
+       like the single combined request this mock used to answer. */
+    navigator.mediaDevices.getUserMedia = async c => {
+      if (!c || !c.video) return new MediaStream();
       window.__camOpen++;
       const s = cam.captureStream(15);
       window.__camTrack = s.getVideoTracks()[0];

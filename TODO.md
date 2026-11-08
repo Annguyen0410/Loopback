@@ -1,5 +1,33 @@
 # Cleanup & Verification Log
 
+## v1.8.1 — Chụp / quay / mở chat từ floating bar phản hồi tức thì (8/11)
+
+### Bối cảnh (bạn báo)
+“Mỗi lần nhấn nút trong floating bar là mất tới ~30 giây mới hiện lên, máy còn lag — tối ưu cho bấm cái lên liền.”
+
+### Đo trước khi sửa (máy này, 1920×1080, profile vứt đi)
+- **Chụp: bấm → picker hiện = 1.976 ms.** Trong đó `desktopCapturer.getSources` full-size **857 ms** (lần đầu trong phiên **3.057 ms**), dựng cửa sổ + load trang picker **87–1.661 ms**, `toPNG()` trên main **74–789 ms** (chặn cả tiến trình main ⇒ mọi cửa sổ đứng), rồi chuỗi base64 + IPC + decode.
+- **Quay: bấm → HUD hiện = 1.716 ms**, nhưng riêng `getUserMedia` cam+mic đã **2.328 ms** và **không có timeout** — camera bận là chờ vô hạn, trong khi màn hình đã bị thu và người dùng không thấy gì.
+- **Mở chat: cửa sổ hiện sau 123 ms, `app-ready` sau 660 ms** (store + settings đọc nối tiếp).
+
+### Đã sửa ([main.js](main.js) · [src/renderer/capture.js](src/renderer/capture.js) · [shot-overlay.js](shot-overlay.js) · [src/renderer/main.js](src/renderer/main.js) · [styles.css](styles.css))
+- **Chụp: dựng cửa sổ + load trang picker SONG SONG với lúc chụp màn hình** (`parkOverlaysForShot` + `getSources`), ảnh gửi khi cả hai xong; kích thước pixel đi kèm `shot:ready` thay vì query. Fallback “hiện picker dù trang không báo” dời sang **sau khi gửi ảnh** (nếu để lúc tạo cửa sổ thì nó bắn giữa lúc đang chụp ⇒ lại là màn hình đen), failsafe trong overlay cũng chỉ chạy khi ảnh đã tới.
+- **Card review không decode lại PNG** chỉ để lấy kích thước: `shot:done` đưa thẳng size của ảnh đã crop.
+- **Quay: mic và camera được hỏi NGAY, song song với `getDisplayMedia`**; chỉ chờ **mic** (timeout 1.5 s) trước khi `MediaRecorder.start()`, **camera join sau** (timeout 8 s) — video ghi từ canvas nên bubble camera xuất hiện từ lúc nó sẵn sàng, không chặn start. Thiết bị trả về muộn bị `stop()` (đèn camera không sáng lại), có `recSession` để camera về muộn không bám vào phiên đã dừng.
+- **Bấm là có phản hồi ngay**: toast “Capturing the screen…” / “Starting recording…”, và `.pip-tool.busy` (trước chỉ `.rail-btn.busy` có style nên nút trong bar trông như không ăn).
+- **`setDisplayMediaRequestHandler` trả lời đúng MỘT lần** (trước đó nhánh từ chối gọi `callback({video: undefined})` → throw → catch gọi lần hai ⇒ “display capture failed” + unhandledRejection).
+- **Mở chat**: `store:load` + `settings:load` chạy `Promise.all` thay vì nối tiếp.
+- **`camtest.js`**: `getUserMedia` giả giờ chỉ tính **request có `video`** là một lần mở camera (mic được hỏi riêng), và trả stream rỗng cho request audio — đúng hành vi cũ “không có mic”.
+
+### Kiểm chứng (đo lại sau khi sửa)
+- [x] **Bấm chụp → picker hiện: 1.976 ms → 863 ms** (cùng máy, cùng profile vứt đi).
+- [x] **Bấm quay → HUD hiện: 1.716 ms → 1.324 ms**, và HUD lên **trước khi camera sẵn sàng** (`camera live at HUD time: false`) — camera vào sau mà video vẫn có bubble.
+- [x] `npm test` → **95 passed, 0 failed**.
+- [x] `audittest.js` → **RESULT PASS** (gồm 2 lần bấm chụp cùng lúc → đúng 1 picker; picker đóng được; 0 console error).
+- [x] `reviewtest.js` → **RESULT PASS**, `captest.js` → **PASS**, `hudtest.js` → **PASS**, `camtest.js` → **exit 0** (55 check, gồm quay từ bar thu gọn + bubble camera).
+- [!] `rectest.js` **4 FAIL** (SD 480p / 60 fps / bitrate / `getDisplayMedia` 60 fps+never) — **đã chạy lại trên `HEAD` bằng git worktree: FAIL y hệt, cùng giá trị** ⇒ lỗi có từ trước, không phải hồi quy của vòng này.
+- Còn lại: thời gian **chụp màn hình của OS** (0,6–3 s ở máy này) vẫn là sàn của việc picker xuất hiện — nút bấm thì phản hồi ngay, nhưng không thể hiện vùng chọn trước khi hệ thống trả khung hình.
+
 ## v1.8.0 — Monitor truth, offline cache, request budget (23/10)
 
 ### Đã sửa (đo được, không đoán)

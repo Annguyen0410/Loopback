@@ -403,11 +403,14 @@ onReady(async () => {
   const btnQuickNote = $("btnQuickNote");
   if (btnQuickNote) btnQuickNote.addEventListener("click", () => window.api.openQuickNote());
 
-  /* Load persisted data */
+  /* Load persisted data — both reads at once. The floating popup is blank until
+     this resolves, and the two round trips were being paid one after the other. */
   try {
-    const loaded = await window.api.load();
+    const [loaded, cfg] = await Promise.all([
+      window.api.load().catch(() => null),
+      window.api.loadSettings().catch(() => null)
+    ]);
     if (loaded && Array.isArray(loaded.messages)) Object.assign(state, loaded);
-    const cfg = await window.api.loadSettings();
     if (cfg) Object.assign(settings, cfg);
   } catch (err) {
     console.error("Init load failed:", err);

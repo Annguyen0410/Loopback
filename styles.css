@@ -608,6 +608,9 @@ body.pip-mode.pip-collapsed .messages{background:transparent}
 .pip-tool{position:relative;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--pill-shift) 18%,transparent);color:var(--on-accent);transition:background var(--t-fast),transform var(--t-fast);flex-shrink:0}
 .pip-tool:hover{background:color-mix(in srgb,var(--pill-shift) 32%,transparent);transform:scale(1.06)}
 .pip-tool:active{transform:scale(.94)}
+/* A tool that is working on a click (screen grab, recording start-up) says so
+   at once — the bar must answer the press even when the work takes a moment. */
+.pip-tool.busy{opacity:.55;pointer-events:none}
 .pip-tool svg{width:15px;height:15px;pointer-events:none}
 .pip-tool .rec-dot{display:none;position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#ff3b30;box-shadow:0 0 0 1.5px var(--accent);animation:pulse 1s infinite}
 .pip-tool.recording{background:rgba(239,68,68,.95)}

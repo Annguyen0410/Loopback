@@ -4,8 +4,12 @@
  */
 (function () {
   const q = new URLSearchParams(location.search);
-  const imgW = Number(q.get("imgW")) || Number(q.get("w")) || 1;
-  const imgH = Number(q.get("imgH")) || Number(q.get("h")) || 1;
+  /* The frozen screen's pixel size arrives with `shot:ready` — this page is
+     built in parallel with the screen grab, so its size is not known yet when
+     it loads. The display bounds from the query stay as a fallback.
+     These are `let` on purpose: pxScale() and the full-screen button read them. */
+  let imgW = Number(q.get("imgW")) || Number(q.get("w")) || 1;
+  let imgH = Number(q.get("imgH")) || Number(q.get("h")) || 1;
 
   /** Overlay CSS pixels → source image pixels (HiDPI / multi-monitor).
    *  The frozen screen is stretched to fill the page (object-fit:fill at
@@ -44,12 +48,12 @@
   }
 
   let shotData = null;
-  /* Failsafe: this overlay is a full-screen opaque window. If the frozen
-     screen never arrives (or fails to decode), close it — a black screen the
-     user cannot get rid of is far worse than a failed screenshot. */
-  const failsafe = setTimeout(() => {
-    if (!shotData) { try { window.shot.cancel(); } catch {} }
-  }, 2500);
+  /* Failsafe: this overlay is a full-screen opaque window. If the frozen screen
+     arrives but never decodes, close it — a black screen the user cannot get
+     rid of is far worse than a failed screenshot. The clock starts when the
+     image is actually here: the page is built while the screen grab runs, so
+     waiting for `shot:ready` can legitimately take seconds. */
+  let failsafe = null;
   /* The frozen screen is only painted once the browser has the decoded bitmap,
      and main holds the window back until then (`shot:painted`). Showing the
      picker earlier meant a black full-screen window that swallowed clicks for a
@@ -62,12 +66,16 @@
   img.addEventListener("load", announcePainted);
 
   window.shot.ready(d => {
-    if (d && d.dataUrl) {
-      shotData = d.dataUrl;
-      clearTimeout(failsafe);
-      img.src = d.dataUrl;
-      if (img.complete) announcePainted(); // already decoded (cached)
-    }
+    if (!d || !d.dataUrl) return;
+    if (Number(d.imgW) > 0) imgW = Number(d.imgW);
+    if (Number(d.imgH) > 0) imgH = Number(d.imgH);
+    shotData = d.dataUrl;
+    clearTimeout(failsafe);
+    failsafe = setTimeout(() => {
+      if (!img.complete) { try { window.shot.cancel(); } catch {} }
+    }, 2500);
+    img.src = d.dataUrl;
+    if (img.complete) announcePainted(); // already decoded (cached)
   });
   img.addEventListener("error", () => { try { window.shot.cancel(); } catch {} });
 

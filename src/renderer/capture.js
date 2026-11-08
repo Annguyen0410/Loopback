@@ -35,6 +35,9 @@ let previewVideo = null;
 let previewBadge = null;
 let overlayOpen = false;
 let frameTimer = null;
+/* Bumped every time a recording starts or ends: a camera that is still opening
+   when the recording is stopped must not attach itself to the next one. */
+let recSession = 0;
 
 /** Preview size at the default (M) step; S/L scale it. */
 const PREVIEW_BASE = { w: 160, h: 120 };
@@ -332,6 +335,8 @@ function setRecWindowUnthrottled(on) {
 }
 
 async function stopRec(save = true) {
+  // Any camera still opening belongs to the session that just ended.
+  recSession++;
   const rec = mediaRecorder;
   mediaRecorder = null;
   const chunks = recChunks;
@@ -494,36 +499,38 @@ function waitForVideo(video, ms = 2000) {
   });
 }
 
-async function getCamMic() {
-  // Prefer cam+mic together; fall back to independent requests so one
-  // denial doesn't kill the other.
-  try {
-    const s = await navigator.mediaDevices.getUserMedia({
-      video: camConstraint(),
-      audio: micConstraint()
-    });
-    return { stream: s, hasCam: s.getVideoTracks().length > 0, hasMic: s.getAudioTracks().length > 0 };
-  } catch {}
+/** How long a device may hold up a recording. The mic normally answers in well
+ *  under 200 ms; a camera can take seconds, and a camera another app holds can
+ *  take far longer — which is why the camera is never waited for (see startRec). */
+const MIC_WAIT_MS = 1500;
+const CAM_WAIT_MS = 8000;
 
-  let cam = null;
-  let mic = null;
-  try {
-    cam = await navigator.mediaDevices.getUserMedia({ video: camConstraint() });
-  } catch {}
-  try {
-    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraint() });
-  } catch {}
+/**
+ * Resolve with the requested stream, or null after `ms`. A stream that only
+ * arrives after we gave up is stopped here: leaving it open would keep the
+ * camera light on for a recording that never used it.
+ */
+function withTimeout(promise, ms) {
+  return new Promise(resolve => {
+    let settled = false;
+    const timer = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, ms);
+    promise.then(stream => {
+      clearTimeout(timer);
+      if (settled) { stopStream(stream); return; }
+      settled = true;
+      resolve(stream);
+    }, () => { clearTimeout(timer); if (!settled) { settled = true; resolve(null); } });
+  });
+}
 
-  if (!cam && !mic) return null;
-  const tracks = [
-    ...(cam ? cam.getVideoTracks() : []),
-    ...(mic ? mic.getAudioTracks() : [])
-  ];
-  return {
-    stream: new MediaStream(tracks),
-    hasCam: !!cam && cam.getVideoTracks().length > 0,
-    hasMic: !!mic && mic.getAudioTracks().length > 0
-  };
+function getMic(ms = MIC_WAIT_MS) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.resolve(null);
+  return withTimeout(navigator.mediaDevices.getUserMedia({ audio: micConstraint() }), ms);
+}
+
+function getCam(ms = CAM_WAIT_MS) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.resolve(null);
+  return withTimeout(navigator.mediaDevices.getUserMedia({ video: camConstraint() }), ms);
 }
 
 async function startRec() {
@@ -537,6 +544,17 @@ async function startRec() {
 
   starting = true;
   document.querySelectorAll('[data-cap="rec"], #btnScreenRec').forEach(btn => btn.classList.add("busy"));
+  // The click answers at once: the screen grab and the devices take a moment.
+  toast("Starting recording…", "Starting");
+
+  const session = ++recSession;
+  /* Devices are asked for NOW, in parallel with the screen grab. Opening a
+     camera takes seconds on most machines (2.3 s measured here) and can take
+     much longer while another app holds it; the old flow awaited it after the
+     screen had already been captured, so the button looked dead (and the
+     desktop was already being captured) for all of that. */
+  const micP = getMic();
+  const camP = getCam();
 
   const fps = recFps();
   try {
@@ -551,6 +569,9 @@ async function startRec() {
   } catch (e) {
     starting = false;
     document.querySelectorAll('[data-cap="rec"], #btnScreenRec').forEach(btn => btn.classList.remove("busy"));
+    // A recording that never started must not leave a device open.
+    micP.then(stopStream);
+    camP.then(stopStream);
     toast(
       e && e.name === "NotAllowedError" ? "Screen capture cancelled" : "Screen capture failed: " + ((e && e.name) || "error"),
       e && e.name === "NotAllowedError" ? "Cancelled" : "Capture failed"
@@ -563,20 +584,41 @@ async function startRec() {
   if (hideAppWhileRecording()) setAppHidden(true);
   setRecWindowUnthrottled(true);
 
-  const camMic = await getCamMic();
-  if (camMic) {
-    const camTracks = camMic.stream.getVideoTracks();
-    const micTracks = camMic.stream.getAudioTracks();
-    const adopted = camTracks.length ? camera.attachStream(new MediaStream(camTracks)) : false;
-    // Never leave a camera open that nothing draws from — its light would stay on.
-    if (!adopted) camTracks.forEach(t => { try { t.stop(); } catch {} });
-    micStream = micTracks.length ? new MediaStream(micTracks) : null;
-    camEnabled = adopted;
-    micEnabled = !!micStream;
-  } else {
-    toast("Mic/camera unavailable — recording screen only", "Screen only");
-    camEnabled = micEnabled = false;
-  }
+  /* Only the microphone is waited for — it answers in milliseconds and it has to
+     be in the mixed stream before MediaRecorder.start(). */
+  const mic = await micP;
+  // Keep the audio only: anything else a mic request may have opened would stay
+  // live for the whole recording without being used by anyone.
+  if (mic) mic.getVideoTracks().forEach(t => { try { t.stop(); } catch {} });
+  micStream = mic && mic.getAudioTracks().length ? new MediaStream(mic.getAudioTracks()) : null;
+  micEnabled = !!micStream;
+  if (!micStream) toast("No microphone — recording video only", "Mic off");
+
+  /* The camera joins the recording WHENEVER it is ready: the video is the
+     canvas, not the camera track, so a late camera simply starts appearing in
+     the frames from that moment — the recording never waits for it. */
+  camEnabled = false;
+  camP.then(stream => {
+    if (session !== recSession) { stopStream(stream); return; } // recording already ended
+    // The camera button may already have opened the device while this was in flight.
+    if (camera.isLive()) { stopStream(stream); return; }
+    const camTracks = stream ? stream.getVideoTracks() : [];
+    if (!camTracks.length || !camera.attachStream(new MediaStream(camTracks))) {
+      // Never leave a camera open that nothing draws from — its light would stay on.
+      stopStream(stream);
+      toast("Camera unavailable — recording without it (the camera button adds it later)", "Cam off");
+      return;
+    }
+    camEnabled = true;
+    setToggleUi();
+    renderPreview();
+    /* One bubble per recording: when the camera was already live before the
+       recorder started, setRecUi(true) opens it below. Only a camera joining an
+       already-running recording opens it from here. */
+    if (isRec && useFloatingCam()) openCamOverlay();
+    startCamFrames();
+    try { if (window.api.cam) window.api.cam.state("on"); } catch {}
+  }).catch(() => {});
 
   try {
     const screenVid = document.createElement("video");
@@ -694,6 +736,7 @@ async function startRec() {
     if (sTrack) sTrack.addEventListener("ended", () => { stopRec(true); }, { once: true });
   } catch (e) {
     console.error("startRec failed", e);
+    recSession++; // a camera still opening must not join a recording that failed
     stopTracks();
     starting = false;
     mediaRecorder = null;
@@ -709,9 +752,13 @@ async function startShot(btn) {
     return;
   }
   if (btn) btn.classList.add("busy");
+  // Answer the press immediately — the grab itself takes a moment.
+  toast("Capturing the screen…", "Screenshot");
   try {
     const r = await window.api.capture.startShot();
-    if (r && r.ok) toast("Drag to select a region", "Drag to select");
+    // The picker is the feedback from here on; a second toast would just cover
+    // the desktop the user is about to drag on.
+    if (r && r.ok) { /* the region picker is on screen */ }
     // A picker closed before it appeared is a cancel, not a failure: saying
     // "Screenshot failed" there would just be noise.
     else if (r && r.canceled) { /* nothing to report */ }
