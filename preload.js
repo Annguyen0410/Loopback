@@ -35,6 +35,13 @@ contextBridge.exposeInMainWorld("api", {
   setTheme: m => ipcRenderer.invoke("theme:set", m),
   openMonitor: () => ipcRenderer.send("monitor:open"),
 
+  /* Automation workspace — a separate window with its own preload and IPC namespace. The chat window may
+     only open it and read its status; everything else is refused by src/main/ipc-policy.js. */
+  automation: {
+    open: route => ipcRenderer.invoke("automation:open", route),
+    status: () => ipcRenderer.invoke("automation:status")
+  },
+
   /* Quick note popup (also on the global Ctrl+Alt+N hotkey) */
   openQuickNote: () => ipcRenderer.send("quick:open"),
 

@@ -13,6 +13,8 @@ const { installIpcGuard, pageRole, roleForUrl, permissionAllowed } = require("./
 const { externalUrl, isAppPage } = require("./src/main/security.js");
 const { createMonitorProxy } = require("./src/main/monitor-proxy.js");
 const { createMonitorScheduler } = require("./src/main/monitor-scheduler.js");
+/* The automation module's only door into the host: lifecycle, its window, notifications, hotkeys. */
+const automationHost = require("./src/main/automation-host.js");
 
 protocol.registerSchemesAsPrivileged([
   { scheme: "local-file", privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }
@@ -39,7 +41,13 @@ app.commandLine.appendSwitch('disable-features', [
 ].join(','));
 
 const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) { app.quit(); }
+if (!gotLock) {
+  /* The first instance already received the second-instance event. This
+     process must not keep going: app.quit() alone can still let the ready
+     callback run and initialise the automation DB/window a second time. */
+  app.quit();
+  process.exit(0);
+}
 
 /* A stray error in the main process must never turn into the modal "A
    JavaScript error occurred in the main process" dialog: it is written to
@@ -103,8 +111,8 @@ const IS_TEST_BOOT = !!(require.main && require.main.filename && require.main.fi
 /* Smoke tests stay window-only by default; traytest.js sets this to exercise
    the real background path (tray icon + keep-alive) in the same process. */
 const TRAY_IN_TEST = process.env.LOOPBACK_TRAY_TEST === "1";
-const PIP_BUBBLE_H = { w: 280, h: 52 }; // horizontal pill (fits shot/rec/media tools)
-const PIP_BUBBLE_V = { w: 56, h: 248 }; // vertical bookmark tab (fits stacked tools)
+const PIP_BUBBLE_H = { w: 320, h: 52 }; // horizontal pill (fits TaskOrbit + four capture tools)
+const PIP_BUBBLE_V = { w: 56, h: 286 }; // vertical bookmark tab (fits six stacked actions)
 const PIP_CHAT = { w: 430, h: 700 };
 const PIP_CFG = () => path.join(app.getPath("userData"), "pip.json");
 
@@ -547,7 +555,7 @@ function registerHandlers() {
     return result;
   });
   ipcMain.handle("settings:load", () => { try { return loadCfg(); } catch { return { darkMode: false, theme: "blue" }; } });
-  ipcMain.handle("settings:save", (_, d) => {
+  ipcMain.handle("settings:save", (e, d) => {
     try {
       // Persist sidebar collapse independently if the payload omitted it.
       const cur = loadCfg();
@@ -562,7 +570,13 @@ function registerHandlers() {
         try { w.webContents.send("settings:changed", saved); } catch {}
       });
       return { ok: true };
-    } catch { return { ok: false }; }
+    } catch (err) {
+      // Do not swallow a failed save silently: the renderer keeps its optimistic
+      // value while every other window would stay stale, and there would be no
+      // trace to explain it. The message has no user data in it.
+      console.warn("[Main] settings save failed:", (err && err.message) || err);
+      return { ok: false };
+    }
   });
 
   ipcMain.handle("file:pick", async (_, filters) => {
@@ -1094,7 +1108,7 @@ function registerHandlers() {
   ipcMain.handle("capture:startShot", () => openScreenshotOverlay());
 
   /* ===== Floating camera bubble =====
-   * The collapsed floating bar (56×248 / 280×52) has no room for a live camera
+   * The collapsed floating bar (56×286 / 320×52) has no room for a live camera
    * preview, so when a recording starts there the recording window asks for
    * this small always-on-top camera window instead. It is excluded from capture
    * like the bubble itself, so it never shows up in the video — wherever the
@@ -1719,7 +1733,7 @@ function registerHandlers() {
       : screen.getPrimaryDisplay().workArea;
     /* A popup is BORN at its expanded size, centred. Creating it pill-sized
        and only telling the renderer "expanded" afterwards left the whole chat
-       squeezed into a 56×248 window (and, because `pipCollapsed` was already
+       squeezed into a 56×286 window (and, because `pipCollapsed` was already
        false, the auto-expand that was supposed to fix it never ran). */
     const chat = expand ? expandedBoundsOn(wa) : null;
     const x = chat ? chat.x : docked ? docked.x : hasSaved
@@ -2150,6 +2164,26 @@ function showChatWindow() {
   } catch (err) { console.warn("[Main] open from tray failed:", (err && err.message) || err); }
 }
 
+/* A portable launch can hand the first window a minimized startup state after
+   ready-to-show has already passed. Re-check briefly after launch, but only
+   while the window is minimized: hiding to the floating bar uses hide(), so a
+   deliberate tuck is left alone. */
+function keepChatOnScreen(w) {
+  const deadline = Date.now() + 6000;
+  const tick = () => {
+    if (!alive(w) || isQuitting || STARTED_HIDDEN) return;
+    try {
+      if (w.isMinimized()) {
+        w.restore();
+        w.show();
+        w.focus();
+      }
+    } catch { /* the window may have been closed mid-check */ }
+    if (Date.now() < deadline) setTimeout(tick, 400);
+  };
+  setTimeout(tick, 250);
+}
+
 /* A one-off Windows balloon so "I closed the bubble and the app vanished" has
    an answer on screen. Never nags twice in a session. */
 function trayBalloon(title, body) {
@@ -2183,6 +2217,8 @@ function refreshTrayMenu() {
     refreshTrayMenu();
   };
 
+  const acts = automationHost.actions();
+
   trayMenu = [
     { label: chatVisible ? "Focus Loopback" : "Open Loopback", click: () => { showChatWindow(); setTimeout(refreshTrayMenu, 400); } },
     {
@@ -2192,6 +2228,17 @@ function refreshTrayMenu() {
         else ipcMain.emit("pip:openbar", {}, pipDockSide());
         setTimeout(refreshTrayMenu, 400);
       }
+    },
+    { type: "separator" },
+    {
+      label: "Automation",
+      submenu: [
+        { label: "Open Automation Workspace", click: () => { try { automationHost.open(); } catch {} } },
+        { label: "Auto Clicker: Start / Stop", enabled: !!acts, click: () => { try { acts && acts.toggleClicker(); } catch {} } },
+        { label: "Run Daily Routine now", enabled: !!acts, click: () => { try { acts && acts.runRoutine(); } catch {} } },
+        { label: "Phone Control: On / Off", enabled: !!acts, click: () => { try { acts && acts.toggleRemote(); } catch {} } },
+        { label: "Stop all automation", enabled: !!acts, click: () => { try { acts && acts.stopAll(); } catch {} } }
+      ]
     },
     { type: "separator" },
     {
@@ -2333,7 +2380,97 @@ function createWindow() {
   });
   win = w; // reference the local window everywhere below: a late event from an
            // old window must never touch the new one
-  w.loadFile(path.join(__dirname, "index.html"));
+
+  /* A file load can occasionally stop halfway (the window is left showing the
+     dark BrowserWindow background and the renderer never starts). A fresh
+     navigation fixes it, so give the first one a bounded chance and then reload
+     at most twice. This is deliberately a watchdog, not a permanent retry loop:
+     a real error must still leave the window available for inspection. */
+  let loadRetryTimer = null;
+  let loadRetries = 0;
+  let loadFinished = false;
+  let rendererCrashes = 0;
+  let rendererRetryTimer = null;
+  const loadChatPage = () => {
+    if (!alive(w) || isQuitting) return;
+    try {
+      /* loadFile, not webContents.reload(): a renderer that died before its
+         first navigation has no URL to reload, and reloading that empty target
+         just kills the replacement renderer again. A fresh navigation is the
+         only thing that can bring the window back. */
+      const pending = w.loadFile(path.join(__dirname, "index.html"));
+      if (pending && typeof pending.catch === "function") pending.catch(() => {});
+    } catch {}
+  };
+  const stopLoadWatchdog = () => {
+    if (loadRetryTimer) { clearTimeout(loadRetryTimer); loadRetryTimer = null; }
+    if (rendererRetryTimer) { clearTimeout(rendererRetryTimer); rendererRetryTimer = null; }
+  };
+  const armLoadWatchdog = () => {
+    stopLoadWatchdog();
+    loadRetryTimer = setTimeout(() => {
+      loadRetryTimer = null;
+      if (!alive(w) || isQuitting || loadRetries >= 2 || loadFinished) return;
+      loadRetries += 1;
+      console.warn("[Main] chat page load stalled; reloading", loadRetries + "/2");
+      loadFinished = false;
+      loadChatPage();
+      armLoadWatchdog();
+    }, 2500);
+  };
+  const retryInitialLoad = reason => {
+    if (!alive(w) || isQuitting || loadRetries >= 2) return;
+    loadRetries += 1;
+    console.warn("[Main] chat page load failed; reloading", loadRetries + "/2", reason);
+    loadFinished = false;
+    loadChatPage();
+    armLoadWatchdog();
+  };
+  w.webContents.on("did-finish-load", () => {
+    loadFinished = true;
+    stopLoadWatchdog();
+  });
+  w.webContents.on("did-fail-load", (_event, code, description, _url, isMainFrame) => {
+    if (!isMainFrame || code === -3) return;
+    retryInitialLoad(`${code} ${description || ""}`.trim());
+  });
+  /* A renderer can die before it ever gets a URL (seen when a portable copy
+     was being unpacked over the running app's folder). Keep the window alive,
+     but start a fresh navigation with backoff instead of leaving a black frame.
+     The cap prevents a permanently broken install from looping forever. */
+  w.webContents.on("render-process-gone", (_event, details) => {
+    if (!alive(w) || isQuitting) return;
+    console.warn("[Main] chat renderer gone:", (details && details.reason) || "unknown", details && details.exitCode);
+    if (rendererCrashes >= 5) return;
+    rendererCrashes += 1;
+    loadRetries = 0;
+    loadFinished = false;
+    stopLoadWatchdog();
+    const delay = Math.min(6000, 1000 * rendererCrashes);
+    rendererRetryTimer = setTimeout(() => {
+      rendererRetryTimer = null;
+      if (!alive(w) || isQuitting) return;
+      console.warn("[Main] rebuilding chat page after renderer crash", rendererCrashes + "/5");
+      loadChatPage();
+      armLoadWatchdog();
+    }, delay);
+  });
+
+  /* show: true is the default, but an explicit show on first paint makes a
+     normal launch recover even if the window was created during a quit or a
+     previous instance left it hidden. Hiding to the bar remains an explicit
+     user action (app:tuckIntoBar / tray toggle). */
+  w.once("ready-to-show", () => {
+    if (w.isDestroyed()) return;
+    /* Windows can launch the process minimized (shortcut/startup shell), and
+       show() on a minimized window leaves it in the taskbar. Restore first so
+       a normal launch always ends with the chat on screen. */
+    if (w.isMinimized()) w.restore();
+    w.show();
+    w.focus();
+  });
+  loadChatPage();
+  armLoadWatchdog();
 
   /* Minimizing the app reveals the floating bar immediately instead of just
      dropping into the taskbar — one click, no intermediate window. */
@@ -2350,7 +2487,7 @@ function createWindow() {
 
   /* Forget the window instead of keeping a destroyed object around — that
      dangling reference is what made Electron throw "Object has been destroyed". */
-  w.on("closed", () => { if (win === w) win = null; });
+  w.on("closed", () => { stopLoadWatchdog(); if (win === w) win = null; });
   return w;
 }
 
@@ -2413,6 +2550,19 @@ app.whenReady().then(() => {
   chatStore = store.createStore({ file: DATA() });
   registerHandlers();
   registerQuickShortcut();
+
+  /* Automation IPC is registered AFTER installIpcGuard (which is installed at the top of registerHandlers),
+     so the role table in src/main/ipc-policy.js governs every automation: channel. The module itself is
+     initialised separately and gated out of the smoke-test boots, which must not touch real user data. */
+  automationHost.registerWindowIpc(ipcMain);
+  if (!IS_TEST_BOOT) {
+    void automationHost.init({
+      iconPath: APP_ICON,
+      getAccent: () => { try { return loadCfg().theme || "blue"; } catch { return "blue"; } },
+      getLocale: () => { try { return loadCfg().language === "vi" ? "vi" : "en"; } catch { return "en"; } },
+      onReady: () => { try { refreshTrayMenu(); } catch {} }
+    });
+  }
 
   /* Least privilege, per role (src/main/ipc-policy.js): the chat windows may use the microphone, the camera,
      display capture, fullscreen and the clipboard; the monitor only fullscreen + clipboard; the review card
@@ -2528,8 +2678,28 @@ app.whenReady().then(() => {
      it is asked for. That is what "already running when the PC starts" should
      feel like, and it keeps a hidden chat renderer — the largest single chunk
      of the app's memory — off a machine nobody is looking at it on. */
-  if (!STARTED_HIDDEN) createWindow();
-  if (!IS_TEST_BOOT) { createTray(); startupExtras(); }
+  if (!STARTED_HIDDEN) {
+    const startupWindow = createWindow();
+    keepChatOnScreen(startupWindow);
+    /* A portable launcher can minimize or hide the inner process just after
+       ready-to-show has fired. Check once more after startup settles; a normal
+       launch must always end with the chat on screen. --autostart stays quiet. */
+    setTimeout(() => {
+      if (isQuitting || STARTED_HIDDEN) return;
+      // The user closed the window during the launch animation. The startup
+      // check exists to rescue a window the portable wrapper hid, never to
+      // resurrect one that was deliberately closed (which also made the tray
+      // test reopen the chat 1.8 seconds after the last window went away).
+      if (!alive(startupWindow)) return;
+      if (alive(win) && win.isVisible() && !win.isMinimized()) return;
+      try { showChatWindow(); }
+      catch (err) { console.warn("[Main] startup show failed:", (err && err.message) || err); }
+    }, 1800);
+  }
+  /* Packaged smoke tests set LOOPBACK_NO_STARTUP_EXTRAS so a verification launch cannot rewrite the user's
+     Windows login item or leave a tray icon behind. Real launches never set it. */
+  const NO_STARTUP_EXTRAS = process.env.LOOPBACK_NO_STARTUP_EXTRAS === "1";
+  if (!IS_TEST_BOOT && !NO_STARTUP_EXTRAS) { createTray(); startupExtras(); }
   else if (TRAY_IN_TEST) {
     createTray();
     if (STARTED_HIDDEN) startupExtras();
@@ -2539,14 +2709,37 @@ app.whenReady().then(() => {
 /* Launching the app again (shortcut, taskbar, second click on the exe) must
    always end with the chat window in front — even when only the floating bar
    survived, and never by poking a destroyed window. */
-app.on("second-instance", () => {
-  try { createWindow(); }
+app.on("second-instance", (_event, argv) => {
+  if (Array.isArray(argv) && argv.includes("--automation")) {
+    try { automationHost.open(); return; } catch { /* fall through to chat */ }
+  }
+  /* Re-launching the shortcut must bring the chat window back even when the
+     user had tucked it into the floating bar or hidden it from the tray. */
+  try { showChatWindow(); }
   catch (err) { console.warn("[Main] second-instance failed:", (err && err.message) || err); }
 });
-app.on("before-quit", () => { isQuitting = true; });
+/* The automation module gets a clean shutdown before the app really leaves: it stops the clicker/keyer,
+   closes Chrome it launched, closes the phone server and checkpoints the SQLite database. The quit is
+   deferred once so that cleanup can finish; the timeout keeps a stuck service from wedging the app. */
+let automationQuitDone = false;
+app.on("before-quit", (event) => {
+  isQuitting = true;
+  if (automationQuitDone || IS_TEST_BOOT) return;
+  event.preventDefault();
+  automationQuitDone = true;
+  const finish = () => { try { app.quit(); } catch {} };
+  Promise.race([
+    automationHost.shutdown().catch(() => {}),
+    new Promise(resolve => setTimeout(resolve, 4000))
+  ]).then(finish, finish);
+});
 app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch {} });
 app.on("window-all-closed", () => {
   if (process.platform === "darwin") return;
+  /* The automation workspace is auxiliary: closing it must never look like "the user closed Loopback",
+     because its scheduler, watchers, clicker and phone server are still running. Quit from the tray (or the
+     normal quit path) is what stops the app. */
+  if (automationHost.closedRecently()) return;
   /* The tray keeps the app alive with nothing on screen — that IS the
      background mode. Turning it off (or quitting from the tray menu) restores
      the old "closing the last window quits" behaviour. */

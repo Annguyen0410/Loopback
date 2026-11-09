@@ -124,7 +124,14 @@ const ROLE_CHANNELS = {
   'monitor:open': CHAT,
   'monitor:close': ['monitor'],
   'monitor:proxy': ['monitor'],
-  'monitor:sys': ['monitor']
+  'monitor:sys': ['monitor'],
+
+  /* Automation host channels. The rest of the `automation:` namespace is granted by the prefix rule below:
+     only the automation role may call it. These three are the deliberate exceptions — chat may open the
+     workspace and read its status, and only the workspace may close itself. */
+  'automation:open': CHAT,
+  'automation:status': CHAT,
+  'automation:close': ['automation']
 };
 
 const DEFAULT_ROLES = CHAT;
@@ -136,7 +143,8 @@ const PAGE_ROLES = {
   'quick.html': 'quick',
   'shot-overlay.html': 'shot',
   'review.html': 'review',
-  'cam.html': 'cam'
+  'cam.html': 'cam',
+  'automation.html': 'automation'
 };
 
 /** Permissions each role may use. Everything else is denied. */
@@ -164,14 +172,20 @@ const ROLE_PERMISSIONS = {
   review: new Set(['clipboard-sanitized-write']),
   quick: new Set(),
   shot: new Set(),
-  cam: new Set()
+  cam: new Set(),
+  // The workspace only needs the clipboard guard; no camera, microphone or notifications.
+  automation: new Set(['clipboard-sanitized-write'])
 };
 
 function channelAllowed(channel, role) {
-  const allowed = Object.prototype.hasOwnProperty.call(ROLE_CHANNELS, channel)
-    ? ROLE_CHANNELS[channel]
-    : DEFAULT_ROLES;
-  return allowed.includes(role);
+  /* Exact rules win, so the three host exceptions above keep their meaning. */
+  if (Object.prototype.hasOwnProperty.call(ROLE_CHANNELS, channel)) {
+    return ROLE_CHANNELS[channel].includes(role);
+  }
+  /* Every other automation channel belongs to the workspace alone. This is what stops chat from calling
+     `automation:credentials:*` and stops monitor/quick/review/shot/cam from touching the vault. */
+  if (typeof channel === 'string' && channel.startsWith('automation:')) return role === 'automation';
+  return DEFAULT_ROLES.includes(role);
 }
 
 function permissionAllowed(role, permission) {

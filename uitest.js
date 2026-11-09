@@ -242,7 +242,7 @@ app.whenReady().then(async () => {
       })()`);
       const bounds = popup.getBounds();
       check("minimize lands on the floating bar in a bar-sized window",
-        afterMinimize.collapsed === true && bounds.width <= 300 && bounds.height <= 280, { bounds, afterMinimize });
+        afterMinimize.collapsed === true && bounds.width <= 300 && bounds.height <= 320, { bounds, afterMinimize });
       check("the open side panel is put away, so the bubble is what you see",
         panelOverBubble.open === true && afterMinimize.panelHidden === true && afterMinimize.panelPainted === false &&
         afterMinimize.bubbleVisible === true && afterMinimize.bubbleInView === true,

@@ -2,12 +2,12 @@
  * the bubble is collapsed, the recording HUD / toast were wider than the
  * window and got sliced off — only the middle button stayed visible).
  *
- * The collapsed bubble is a real 56×248 (vertical, and 42×186 at pipScale
- * 0.75) or 280×52 (horizontal) window, so all three shapes are exercised:
+ * The collapsed bubble is a real 56×286 (vertical, and 42×215 at pipScale
+ * 0.75) or 320×52 (horizontal) window, so all three shapes are exercised:
  *   1. the recording HUD fits fully inside, with every control reachable
  *   2. each HUD button keeps a real hit target + a title (labels are hidden)
  *   3. a toast fits fully inside as well and never covers the HUD
- *   4. the five pill buttons (chat / shot / rec / media / ⚙) stay inside and
+ *   4. the six pill buttons (chat / TaskOrbit / shot / rec / media / ⚙) stay inside and
  *      sit in ONE straight column — a wrapped second column lands outside the
  *      window, which is how the tools used to disappear entirely
  *
@@ -61,7 +61,7 @@ const PROBE = `
     const pill = document.querySelector('.pip-bubble-pill');
     const tools = [...document.querySelectorAll('.pip-tool')];
     // The open-chat circle is deliberately NOT a .pip-tool (its gestures must
-    // bubble up to the pill so a drag still drags), but it is the 5th button.
+    // bubble up to the pill so a drag still drags), but it is the 6th button.
     const chat = document.getElementById('btnBubbleChat');
     const parts = [...hud.children].filter(el => getComputedStyle(el).display !== 'none').map(el => ({
       id: el.id || el.className,
@@ -101,7 +101,7 @@ const PROBE = `
 
 async function probePipWindow(vertical, scale) {
   const s = scale || 1;
-  const base = vertical ? { w: 56, h: 248 } : { w: 280, h: 52 };
+  const base = vertical ? { w: 56, h: 286 } : { w: 320, h: 52 };
   const size = { w: Math.round(base.w * s), h: Math.round(base.h * s) };
   const win = new BrowserWindow({
     width: size.w, height: size.h, frame: false, transparent: true,
@@ -162,9 +162,9 @@ app.whenReady().then(async () => {
       // over the pause/discard/stop buttons.
       check(label + ": toast never covers the HUD", r.toastShown === false || r.gap >= -1,
         { shown: r.toastShown, gap: r.gap, hudBottom: r.hud.b, toastTop: r.toast.t });
-      // The pill carries four tool buttons (shot / rec / media / ⚙ settings)
+      // The pill carries five tool buttons (TaskOrbit / shot / rec / media / ⚙)
       // plus the open-chat circle, and is clipped if they are one pixel too
-      // tall. In the vertical tab all FIVE are round buttons stacked in one
+      // tall. In the vertical tab all SIX are round buttons stacked in one
       // straight column — a wrapped second column lands outside the window,
       // which is how the tools used to disappear. Horizontal keeps its
       // icon + label + row of tools.
@@ -172,13 +172,13 @@ app.whenReady().then(async () => {
       const straight = vertical
         ? one(r.column.map(c => c.box.l)) && r.column.every((c, i, a) => i === 0 || c.box.t > a[i - 1].box.t)
         : one(r.tools.map(t => t.box.t)) && r.tools.every((t, i, a) => i === 0 || t.box.l > a[i - 1].box.l);
-      check(label + ": the pill and its 4 tool buttons fit inside the window",
-        r.pillInside === true && r.tools.length === 4 &&
+      check(label + ": the pill and its 5 tool buttons fit inside the window",
+        r.pillInside === true && r.tools.length === 5 &&
         r.tools.every(t => t.inside && t.box.w >= 22 && t.box.h >= 22 && t.title),
         { pill: r.pill, tools: r.tools.map(t => t.id) });
-      check(label + ": " + (vertical ? "5 round buttons stack in one straight column" : "the 4 tools sit in one straight row"),
+      check(label + ": " + (vertical ? "6 round buttons stack in one straight column" : "the 5 tools sit in one straight row"),
         straight && (vertical
-          ? r.column.length === 5 && r.column.every(c => c.inside && c.box.w >= 22 && c.box.h >= 22 && c.title)
+          ? r.column.length === 6 && r.column.every(c => c.inside && c.box.w >= 22 && c.box.h >= 22 && c.title)
           : true),
         vertical ? r.column : r.tools);
       check(label + ": no renderer errors", r.errors.length === 0, r.errors);

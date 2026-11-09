@@ -4,7 +4,7 @@ import { $ } from "./dom.js";
 
 let toastTimer = null;
 
-/* The floating bubble is a real 56×248 (vertical) or 280×52 (horizontal)
+/* The floating bubble is a real 56×286 (vertical) or 320×52 (horizontal)
    window — a long caption there wraps into a wall of text, so callers can
    pass a short form that is used only in those tiny windows. */
 function tinyWindow() {

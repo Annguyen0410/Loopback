@@ -6,6 +6,16 @@ node_modules/
 # build output
 dist/
 
+# generated automation bundles — rebuild with `npm run build:automation`
+automation-main/
+automation-ui/
+automation.html
+automation-preload.cjs
+
+# local profile archives and E2E logs
+.backup/
+.test-runs/
+
 # local-only tooling / artifacts — kept on disk, never published
 .freebuff/
 _asarcheck/

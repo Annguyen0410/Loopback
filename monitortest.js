@@ -117,6 +117,16 @@ app.whenReady().then(async () => {
         { symbol: "EURUSD=X", regularMarketPrice: 1.0842, regularMarketChangePercent: 0.15 }
       ] } });
       await new Promise(r => setTimeout(r, 4000)); // crypto hits the real API
+      // World Bank is a separate, slower feed. Poll for it instead of assuming
+      // four seconds is enough on every network — the old fixed wait produced a
+      // false failure while the macro table was still loading.
+      const macroDeadline = Date.now() + 30000;
+      while (Date.now() < macroDeadline) {
+        const el = document.getElementById("finGDP");
+        if (el.querySelectorAll(".fin-row").length > 0) break;
+        if (el.textContent.includes("World Bank unreachable")) break;
+        await new Promise(r => setTimeout(r, 500));
+      }
       return {
         stocks: document.getElementById("finStocks").textContent,
         commod: document.getElementById("finCommodities").textContent,

@@ -32,6 +32,29 @@ npm start          # launch the desktop app
 That opens the Loopback window. Type into the bottom input and hit
 **Enter** to drop a note.
 
+## Automation workspace
+
+Loopback now includes the TaskOrbit automation suite in the same app: dashboard,
+daily routine, credential vault, providers/OpenCode, auto click & key presser,
+tab auto click, PromptForge, auto post, notifications/watchers, scheduler and
+phone control. Open it from the **Automation** button in the chat rail or from
+**Tray → Automation → Open Automation**.
+
+It uses its own window and its own SQLite database under
+`%APPDATA%\messenger-self-chat\automation`, so the chat history, attachments,
+voice notes and captures are untouched. Closing that window does not quit
+Loopback; the tray menu keeps the scheduler and phone server available.
+
+```bash
+npm run build:automation   # rebuild the workspace UI + main bundle
+npx electron tests/automation-app-smoke.cjs   # real window/IPC/DB smoke test
+```
+
+If an old TaskOrbit installation is found, its vault is copied on first launch
+(source left untouched). Browser profiles are not copied automatically.
+
+---
+
 The app also has a **hidden workspace** for the person who knows how to open it.
 It is deliberately not listed in the rail, the tray, the settings or the bubble,
 and this README does not describe the way in. It is an experience secret, not a
@@ -46,7 +69,7 @@ The project is already an Electron app — `npm start` runs it directly. When
 you change code, **rebuild + reinstall** to update the installed copy:
 
 ```bash
-npm run build      # electron-builder → creates installers in dist/
+npm run build      # electron-builder → creates the installer in dist/
 ```
 
 A build also creates a `dist/win-unpacked/` folder (a few hundred MB). It is
@@ -57,7 +80,11 @@ Outputs in `dist/`:
 | File | Purpose |
 | --- | --- |
 | `Loopback Setup <ver>.exe` | NSIS installer — installs with Start-menu + desktop shortcuts |
-| `Loopback <ver>.exe` | Portable build — copy & run, no install |
+
+The Windows build target is **NSIS only** now. The old portable wrapper
+self-extracted into `%TEMP%\loopback-portable`, so launching it while the app
+was already running could overwrite the live app files. Use the installed build
+for daily use; it is also the target that `npm run build` produces.
 
 **Update an existing install:**
 
@@ -91,11 +118,10 @@ that legacy name on purpose — it follows the `name` field in `package.json`, n
 (Get-Item "$env:LOCALAPPDATA\Programs\Loopback\Loopback.exe").VersionInfo.ProductVersion
 ```
 
-Build only a portable exe (faster, no installer):
-
-```bash
-npx electron-builder --win portable
-```
+Do not add a portable target back for this app: the self-extracting wrapper is
+the path that caused the renderer/chat black-screen regression. A future
+portable distribution must use a launcher that unpacks to a versioned folder
+and refuses to overwrite a running copy.
 
 First build downloads the code-signing + NSIS toolchain (~100MB); later
 builds are quick. If a build fails because `assets/` is missing, create an
@@ -366,6 +392,10 @@ been lost.
 | `index.html`            | Messenger UI markup                                            |
 | `styles.css`            | 16 themes, animations, markdown styles, PiP bubble             |
 | `src/renderer/`         | Renderer logic, split into ES modules by feature (see below)   |
+| `src/shared/`           | Pure text/format helpers shared by renderer and Node tests     |
+| `src/automation/`       | TaskOrbit source (main, preload, React renderer, shared types)  |
+| `tests/`                | Pure Node tests + Electron E2E suites and their runner docs     |
+| `scripts/run-e2e.mjs`   | Isolated-profile runner for all real-window suites              |
 | `monitor.html/js/css`   | Hidden fullscreen workspace (not listed anywhere in the UI)     |
 | `monitor-preload.js`    | Preload for the monitor window                                  |
 | `quick.html/js`         | Quick-note capture popup (global `Ctrl+Alt+N`)                  |
@@ -450,39 +480,39 @@ been lost.
   creates the window already expanded and centred (and main answers the
   renderer's `pip:getState()` pull, because the `pip:state` push can arrive
   before the renderer's listener exists), so the chat never starts up squeezed
-  into a 56×248 pill.
+  into a 56×286 pill.
 - Realtime sync replays saved state into every other open window; the main
   process filters out the sender to avoid loops.
 - The quick-note popup writes through the **main process** (`note:append`) and
   then replays the fresh state into every other window, so a stale renderer can
   never overwrite a note captured while the window was hidden.
 - The login item is registered by main on every launch (default on) and points
-  at **the file Windows should start**: the installed exe, or — for the portable
-  build — the portable exe itself, not the copy the wrapper unpacks into
-  `%TEMP%` (that folder is temporary, so an entry aimed there dies on cleanup).
-  It never registers in a dev run, where `process.execPath` is `electron.exe`.
+  at **the installed exe**. It never registers in a dev run, where
+  `process.execPath` is `electron.exe`.
   A `startAtLogin:false` carried over in an old settings.json (from before the
   tray existed) is honored — a launch then even *removes* the entry — so "it
   never starts with Windows" is usually that single line: flip *Start with
   Windows* once in Settings or the tray menu.
-- The **portable** build unpacks ~0.5–0.8 GB next to `%TEMP%` before it starts
-  (measured: the wrapper's two temp folders, ~460 MB + ~300 MB), so it needs
-  that much free space *on the drive holding TEMP* — on a nearly full C: the
-  wrapper exits silently (seen at 0.34 GB free; the same file launched fine
-  with 0.87 GB free). Point `TEMP`/`TMP` at a roomier drive (or install
-  instead), and it launches.
+- The portable target is intentionally disabled. The old wrapper unpacked
+  ~0.5–0.8 GB into `%TEMP%\loopback-portable`, and a second launch could
+  overwrite the files of the running app. The installed NSIS build is the
+  supported daily-use artifact.
 - The global hotkey is registered best-effort: if another app already owns
   `Ctrl+Alt+N` the ⚡ rail button still opens the popup (a warning is logged).
-- **Unit tests**: `npm test` runs `node --test "tests/*.test.js" "tests/*.test.mjs"` — pure-logic suites with no display and no
-  network: atomic writes, the portable janitor, the IPC role policy, external-URL validation, the feed
-  scheduler (one owner per feed, overlap guard, backoff, abort, timeout), the monitor proxy (allowlist,
-  redirects, body cap, cooldowns, concurrency), the chat store (revision guard, stale quick note, size cap) and
-  the data migration (verified backup, idempotence, refuses a corrupt file). The monitor's new pure logic is
-  covered too: event normalization/deduplication/time parsing, country matching, palette token matching,
-  watch-rule matching with cooldowns, and the trending baseline counts.
+- **Unit tests**: `npm test` runs the pure-logic suites with no display and no network. The current suite is
+  **869/869 passing**: atomic writes, the IPC role/channel/permission matrix, external-URL boundaries, the
+  feed scheduler (one owner per feed, overlap guard, backoff, abort, timeout), the monitor proxy (allowlist,
+  redirects, body cap, cooldowns, concurrency), the chat store (revision guard, stale quick note, size cap),
+  the data migration (verified backup, idempotence, refuses a corrupt file), shared text helpers and the
+  architecture guardrails. The monitor's pure logic is covered too: event normalization/deduplication/time
+  parsing, country matching, palette token matching, watch-rule matching with cooldowns, and trending baselines.
   `npx electron tests/bench-monitor-requests.js 60` is the request counter behind the before/after numbers in
   *Network and the hidden workspace*. The manual Windows/installer checks live in
   [QA-CHECKLIST.md](QA-CHECKLIST.md) and are not claimed as automated coverage.
+- **E2E runner**: `npm run test:e2e` runs every real-window suite with a throwaway profile (`npm run test:e2e -- --list`
+  shows the keys). The current release gate is **16/16 suites, 491 passing checks**, documented in
+  [tests/README.md](tests/README.md); `npm run test:all` is the release gate.
+  The architecture map is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - `audittest.js` (`npx electron audittest.js`) is the "is the app healthy and
   ready to use?" sweep: opens and closes **every** window (side panels, the
   floating bar in all its states, the monitor, the quick note, the screenshot
@@ -555,14 +585,14 @@ been lost.
   search over cached events, the country brief's live-evidence join and static
   label, a saved watch rule that fires once and respects its cooldown, feed
   health with last-success/error detail, and cross-source trending topics.
-- The collapsed bubble is a real 56×248 (vertical) or 280×52 (horizontal)
+- The collapsed bubble is a real 56×286 (vertical) or 320×52 (horizontal)
   window, so its in-window UI adapts: the recording HUD drops to icon-only
   controls under 400px wide, stacks vertically in the narrow bubble, and
   toasts get a short caption — nothing is sliced off at the window edges.
 - `hudtest.js` (`npx electron hudtest.js`) smoke-tests exactly that: it builds
-  all three bubble-sized windows (vertical 56×248, horizontal 280×52 and the
-  42×186 one that `pipScale 0.75` produces), shows the HUD + a toast and checks
-  every control stays inside — including the pill itself: five round buttons
+  all three bubble-sized windows (vertical 56×286, horizontal 320×52 and the
+  42×215 one that `pipScale 0.75` produces), shows the HUD + a toast and checks
+  every control stays inside — including the pill itself: six round buttons
   must sit in **one straight column** (a wrapped second column lands outside
   the window, which is how the tools used to vanish) with a real hit target and
   a title. In the short bubble the toast has no room beside the stacked HUD, so

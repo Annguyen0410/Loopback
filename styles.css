@@ -623,24 +623,24 @@ body.pip-mode .chat-header-actions .icon-btn.recording .rec-dot{display:block}
 
 body.pip-mode.pip-collapsed .pip-bubble.pip-dragover .pip-bubble-pill{transform:scale(1.1);box-shadow:0 0 0 3px var(--accent),0 6px 22px rgba(0,0,0,.5)}
 
-/* Vertical bookmark-tab bubble (default): FIVE round buttons in one straight
-   column — open-chat, screenshot, record, library, recording settings.
-   The rotated text label is gone: at 56px wide it was never readable, and its
-   extra height pushed the tools into a second flex column that landed outside
-   the real window (that is how the tools "vanished"). `nowrap` + no separator
-   keeps all five as identical, evenly spaced, clickable circles. */
+/* Vertical bookmark-tab bubble (default): SIX round buttons in one straight
+   column — open-chat, TaskOrbit, screenshot, record, library, recording
+   settings. The rotated text label is gone: at 56px wide it was never readable,
+   and its extra height pushed the tools into a second flex column that landed
+   outside the real window (that is how the tools "vanished"). `nowrap` + no
+   separator keeps all six as identical, evenly spaced, clickable circles. */
 body.pip-mode.pip-vertical .pip-bubble-pill{flex-direction:column;padding:8px 5px;border-radius:18px;gap:5px;writing-mode:horizontal-tb;flex-wrap:nowrap}
 body.pip-mode.pip-vertical .pip-bubble-icon{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.28);flex-shrink:0;transition:background var(--t-fast)}
 body.pip-mode.pip-vertical .pip-bubble-icon svg{width:15px;height:15px}
 body.pip-mode.pip-vertical .pip-bubble-text{display:none}
 body.pip-mode.pip-vertical .pip-bubble-tools{flex-direction:column;gap:5px;margin:0;padding:0;border:0;width:auto}
 /* Extra-small scale (pipScale < 1) shrinks the WINDOW but not CSS pixels, so
-   the five buttons shrink with it — 5×26px + gaps still clears the 42×186
-   window that 0.75 gives us (160px tall, 34px wide). */
-body.pip-mode.pip-vertical.pip-xs .pip-bubble-pill{padding:7px 4px;gap:4px}
+   the six buttons shrink with it — 6×24px + gaps still clears the 34px-wide,
+   172px-tall window at the 0.6 minimum (0.75 gives us 42×215). */
+body.pip-mode.pip-vertical.pip-xs .pip-bubble-pill{padding:6px 4px;gap:3px}
 body.pip-mode.pip-vertical.pip-xs .pip-bubble-icon,
-body.pip-mode.pip-vertical.pip-xs .pip-tool{width:26px;height:26px}
-body.pip-mode.pip-vertical.pip-xs .pip-bubble-tools{gap:4px}
+body.pip-mode.pip-vertical.pip-xs .pip-tool{width:24px;height:24px}
+body.pip-mode.pip-vertical.pip-xs .pip-bubble-tools{gap:3px}
 
 /* Horizontal pill bubble */
 body.pip-mode.pip-horizontal .pip-bubble-pill{flex-direction:row;padding:5px 12px;border-radius:50px}
@@ -692,8 +692,8 @@ body.pip-max #btnPipMax .ic-restore{display:block}
 body.pip-max #btnPipMax{background:var(--hover-bg);color:var(--accent)}
 body.pip-max .pip-resize{display:none!important}
 
-/* ===== Tiny windows: the floating bubble is a real 56×248 (vertical) or
-   280×52 (horizontal) window, so wide centered UI like the recording HUD or a
+/* ===== Tiny windows: the floating bubble is a real 56×286 (vertical) or
+   320×52 (horizontal) window, so wide centered UI like the recording HUD or a
    toast would be sliced off at its edges. Under 400px everything switches to
    icon-only controls that always fit; under 140px the HUD stacks vertically. */
 /* ===== Narrow windows: the floating bubble can be squeezed to a few hundred
@@ -739,15 +739,15 @@ body.pip-max .pip-resize{display:none!important}
   .rec-hud-btn.toggle-btn{min-width:0}
   .toast{bottom:3px;padding:3px 2px;font-size:9.5px;line-height:1.2;max-width:calc(100vw - 4px)}
 }
-/* The narrow bookmark bubble at pipScale 0.75 is only 42×186 and the stacked
-   HUD already fills it (≈158px), so a toast would be painted straight over the
+/* The narrow bookmark bubble at pipScale 0.75 is only 42×215 and the stacked
+   HUD already fills it (≈161px), so a toast would be painted straight over the
    pause / discard / stop buttons. While the HUD is up there the toast stands
    down — those HUD buttons already show the mic / cam / pause state it was
-   reporting. Taller bubbles (248px at full scale) keep their toast. */
-@media(max-width:140px) and (max-height:200px){
+   reporting. Taller bubbles (286px at full scale) keep their toast. */
+@media(max-width:140px) and (max-height:240px){
   body.pip-mode.pip-collapsed:has(.rec-hud:not([hidden])) .toast{display:none}
 }
-/* Very short windows (the horizontal 280×52 pill): slim both down so the HUD
+/* Very short windows (the horizontal 320×52 pill): slim both down so the HUD
    keeps the top strip and the toast the bottom strip — no overlap. */
 @media(max-height:120px){
   .rec-hud{padding:3px 6px;gap:3px}

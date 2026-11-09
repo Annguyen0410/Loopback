@@ -5,10 +5,12 @@ device/profile; do not mark one passed unless it was actually performed on that 
 
 ## Automated (run from the repository root)
 
-- [ ] `npm test` — 95 pure-logic tests: atomic writes, portable janitor, IPC role policy, external-URL rules,
-      feed scheduler, monitor proxy, chat store, data migration, event model/dedupe, watch rules/cooldowns,
-      trending baselines, event-density cells, CISA advisory normalization, the situation brief, aggregate
-      feed health and cached-headline restoration.
+- [ ] `npm test` — 869 pure-logic tests: atomic writes, portable janitor, the exhaustive IPC role/channel and
+      permission matrix, external-URL boundaries, feed scheduler, monitor proxy, chat store, data migration,
+      event model/dedupe, watch rules/cooldowns, shared text helpers and architecture guardrails.
+- [ ] `npm run typecheck:automation` — TaskOrbit TypeScript source and IPC types compile.
+- [ ] `npm run test:e2e` — every real-window suite with a throwaway profile; logs are written to `.test-runs/`.
+- [ ] `npm run test:all` — unit + typecheck + E2E, the release gate.
 - [ ] `npx electron audittest.js` — opens/closes every window, checks the single region picker, and that
       the hidden workspace opens exactly one window without saving its trigger as a chat message.
 - [ ] `npx electron piptest.js` — bubble/bar states, drag, dock, resize, recording HUD.
@@ -25,8 +27,8 @@ device/profile; do not mark one passed unless it was actually performed on that 
       before treating it as a regression.
 - [ ] `npx electron tests/bench-monitor-requests.js 130` — request counter; compare with the numbers in
       README's *Network and the hidden workspace* section (2026-10-23 baseline: 155 total, 78 main, 35 renderer).
-- [ ] `npm run build` — produces `dist\Loopback 1.8.0.exe` and `dist\Loopback Setup 1.8.0.exe`.
-      The asar must match the working tree (excluding `package.json`, which electron-builder rewrites).
+- [ ] `npm run build` — produces `dist\Loopback Setup 1.9.10.exe`. The Windows target is NSIS-only;
+      the asar must match the working tree (excluding `package.json`, which electron-builder rewrites).
 
 ## First run / data
 
@@ -81,9 +83,9 @@ device/profile; do not mark one passed unless it was actually performed on that 
 
 ## Packaging (Windows)
 
-- [ ] Run the portable exe from a clean folder; it extracts once to `%TEMP%\loopback-portable` and starts.
 - [ ] Install with the NSIS setup, launch from Start Menu, uninstall; user data remains in
-      `%APPDATA%\messenger-self-chat`.
+      `%APPDATA%\messenger-self-chat`. Portable is intentionally not shipped (the self-extracting wrapper
+      could overwrite a running install).
 - [ ] Start with Windows (`--autostart`) comes up as the floating bubble/tray, with no chat window and no
       workspace feeds.
 - [ ] High-DPI display and a second monitor: no clipped bubble, HUD, review card or dialog.

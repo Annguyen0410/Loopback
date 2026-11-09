@@ -29,6 +29,22 @@ import { renderConvList, initSidebar } from "./sidebar.js";
 import { initTips } from "./tip.js";
 import { initSectionResize } from "./panelsize.js";
 
+async function openTaskOrbit() {
+  try {
+    if (!window.api || !window.api.automation || !window.api.automation.open) {
+      toast("TaskOrbit is not available in this build");
+      return;
+    }
+    const result = await window.api.automation.open();
+    if (!result || result.ok !== true) {
+      toast("TaskOrbit could not open" + (result && result.error ? ": " + result.error : ""));
+    }
+  } catch (err) {
+    console.error("TaskOrbit open failed:", err);
+    toast("TaskOrbit could not open");
+  }
+}
+
 function closeAll() {
   ["ctxMenu", "reactionPicker", "emojiPicker", "themePicker", "editModal", "attachPopover"].forEach(id => {
     const el = $(id);
@@ -85,7 +101,7 @@ function closeEscapeTargets() {
 /* The side panels and the whiteboard live OUTSIDE .app so that they stay up
    when the window shrinks to the bubble — which is precisely how the floating
    bar used to "disappear" after pressing minimize: a 340px panel left open
-   covers the 56×248 window it just shrank into. Minimizing puts them away
+   covers the 56×286 window it just shrank into. Minimizing puts them away
    first, so what the user asked for (the bar) is what they see. */
 function closeFloatingOverlays() {
   closeGallery();
@@ -402,6 +418,18 @@ onReady(async () => {
 
   const btnQuickNote = $("btnQuickNote");
   if (btnQuickNote) btnQuickNote.addEventListener("click", () => window.api.openQuickNote());
+
+  /* Automation workspace: a separate window, opened from the rail or from the
+     floating bar. The chat preload exposes only open/status; the workspace's
+     own data stays behind the automation: role. */
+  ["btnAutomation", "btnBubbleAutomation", "btnPipAutomation"].forEach(id => {
+    const button = $(id);
+    if (!button) return;
+    button.addEventListener("click", e => {
+      e.stopPropagation();
+      void openTaskOrbit();
+    });
+  });
 
   /* Load persisted data — both reads at once. The floating popup is blank until
      this resolves, and the two round trips were being paid one after the other. */

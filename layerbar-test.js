@@ -6,6 +6,17 @@
 const { app, BrowserWindow } = require("electron");
 const path = require("path");
 const https = require("https");
+const fs = require("fs");
+const os = require("os");
+
+// Keep the monitor's localStorage out of the real app profile.
+app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "loopback-layerbar-")));
+
+let failed = false;
+function check(name, cond, extra) {
+  console.log((cond ? "PASS" : "FAIL") + "  " + name + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
+  if (!cond) failed = true;
+}
 
 function proxyFetch(url, cb) {
   https.get(url, res => {
@@ -89,11 +100,18 @@ app.whenReady().then(() => {
       const clickOk = !!clickRes && clickRes.dragged === false && clickRes.left === "" && clickRes.top === "" && clickRes.width === "" && !clickRes.saved;
 
       // 3) After re-center, the bar's visual centre sits at screen centre.
-      const c = await win.webContents.executeJavaScript(`(function(){
-        const bar = document.getElementById('layerBar');
-        const r = bar.getBoundingClientRect();
-        return { barCenter: Math.round(r.left + r.width / 2), vpCenter: Math.round(window.innerWidth / 2), w: Math.round(r.width) };
-      })()`);
+      // Layout can still settle after the click (live widgets resize the bar),
+      // so poll for the steady state instead of measuring one arbitrary frame.
+      let c = null;
+      for (let i = 0; i < 20; i++) {
+        c = await win.webContents.executeJavaScript(`(function(){
+          const bar = document.getElementById('layerBar');
+          const r = bar.getBoundingClientRect();
+          return { barCenter: Math.round(r.left + r.width / 2), vpCenter: Math.round(window.innerWidth / 2), w: Math.round(r.width) };
+        })()`);
+        if (c && Math.abs(c.barCenter - c.vpCenter) <= 3) break;
+        await new Promise(r => setTimeout(r, 150));
+      }
       console.log("CENTERED " + JSON.stringify(c));
       const centerOk = Math.abs(c.barCenter - c.vpCenter) <= 3;
 
@@ -101,11 +119,16 @@ app.whenReady().then(() => {
       console.log("CLICK-OK " + clickOk);
       console.log("CENTER-OK " + centerOk);
       console.log("CONSOLE-ERRORS " + JSON.stringify(errors));
+      check("dragging the layer bar moves it by the pointer delta and persists the position", dragOk, dragRes);
+      check("a plain click clears the dragged position instead of leaving it off-centre", clickOk, clickRes);
+      check("the bar is centred after the click", centerOk, c);
+      check("no renderer errors", errors.length === 0, errors);
     } catch (e) {
       console.log("EXC " + ((e && e.stack) || e));
+      failed = true;
     } finally {
       try { await win.webContents.executeJavaScript("localStorage.removeItem('wm_layerbar_pos')"); } catch {}
-      app.quit();
+      app.exit(failed ? 1 : 0);
     }
   };
 

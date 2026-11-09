@@ -451,7 +451,7 @@ app.whenReady().then(async () => {
       const bw = screen.getDisplayMatching(bb).workArea;
       const barCollapsed = await bar.webContents.executeJavaScript("document.body.classList.contains('pip-collapsed')");
       check("the bar starts collapsed and docked flush to the right edge",
-        barReady === true && barCollapsed === true && bb.width <= 300 && bb.height <= 260 &&
+        barReady === true && barCollapsed === true && bb.width <= 340 && bb.height <= 260 &&
         Math.abs(bb.x + bb.width - (bw.x + bw.width - 6)) <= 8 &&
         Math.abs(bb.y - (bw.y + Math.round((bw.height - bb.height) / 2))) <= 12,
         { barReady, barCollapsed, bb, bw });

@@ -20,6 +20,9 @@
         </button>
       </div>
       <div class="rail-bottom">
+        <button class="rail-btn" id="btnAutomation" title="Automation workspace" data-tip="Automation — credential vault, providers, auto clicker, PromptForge, daily routine, watchers and phone control.">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)"/><circle cx="19.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+        </button>
         <button class="rail-btn" id="btnScreenshot" data-cap="shot" title="Screenshot (drag to select)" data-tip="Screenshot — drag on screen to pick a region; it is saved and a review card opens with Download, Copy and Save as.">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
@@ -84,6 +87,9 @@
           </div>
         </div>
         <div class="chat-header-actions">
+          <button class="icon-btn pip-only" id="btnPipAutomation" title="TaskOrbit" data-tip="TaskOrbit — open the automation workspace (credential vault, auto clicker, routines, watchers and phone control).">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)"/><circle cx="19.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+          </button>
           <button class="icon-btn pip-only cap-act" id="btnPipShot" data-cap="shot" title="Screenshot (drag to select)" data-tip="Screenshot — pick a region on screen; a review card opens with Download, Copy and Save as, and the shot lands in the media library.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
           </button>
@@ -539,7 +545,7 @@
   <!-- Floating PiP bubble (visible only when pip=1 and collapsed; CSS toggles display) -->
   <div class="pip-bubble" id="pipBubble">
     <div class="pip-bubble-pill">
-      <!-- Button 1 of the five stacked in the vertical tab: open the chat.
+      <!-- First of the six actions stacked in the vertical tab: open the chat.
            Not a .pip-tool — the pill itself handles drag + tap-to-expand, so
            this circle must keep bubbling its gesture up to the pill. -->
       <span class="pip-bubble-icon" id="btnBubbleChat" title="Open chat" data-tip="Open the chat — tapping anywhere on the bar does the same. Drag it to move the bar.">
@@ -547,6 +553,9 @@
       </span>
       <span class="pip-bubble-text">Loopback</span>
       <span class="pip-bubble-tools">
+        <button type="button" class="pip-tool" id="btnBubbleAutomation" title="TaskOrbit" data-tip="TaskOrbit — open the automation workspace without expanding the chat.">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)"/><circle cx="19.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+        </button>
         <button type="button" class="pip-tool" id="btnBubbleShot" data-cap="shot" title="Screenshot" data-tip="Screenshot without opening the chat — drag a region and a review card opens with Download, Copy and Save as.">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>

@@ -99,7 +99,7 @@ function inPipMode() {
 }
 
 /**
- * Recording from the floating bar (collapsed 56×248 bubble or the expanded
+ * Recording from the floating bar (collapsed 56×286 bubble or the expanded
  * mini-chat) uses the separate floating camera window instead of the in-app
  * preview: the bubble has no room for it, and a window that floats over the
  * desktop lets the camera be dropped anywhere on the screen.

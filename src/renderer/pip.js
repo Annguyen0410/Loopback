@@ -2,7 +2,7 @@
  * Floating-bubble (PiP) helpers shared by the panels that live inside the
  * bubble window.
  *
- * The collapsed bubble is a real 56×248 (vertical) or 280×52 (horizontal)
+ * The collapsed bubble is a real 56×286 (vertical) or 320×52 (horizontal)
  * window. Any side panel — media library, recording settings — is 320–360px
  * wide, so opening one there just paints a slab of panel background over the
  * whole window (a black box in dark mode) with the pill and its buttons

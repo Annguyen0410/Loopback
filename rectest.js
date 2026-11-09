@@ -132,7 +132,7 @@ app.whenReady().then(async () => {
     await pipRun(`document.body.classList.add('pip-collapsed')`);
     await wait(300);
     const beforePill = pip.getBounds();
-    check("bubble starts collapsed (56×248)", beforePill.width < 120, beforePill);
+    check("bubble starts collapsed (56×286)", beforePill.width < 120, beforePill);
 
     await pipRun(`document.getElementById('btnBubbleSettings').click()`);
     await wait(900);

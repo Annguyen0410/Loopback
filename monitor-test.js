@@ -1,6 +1,17 @@
 const { app, BrowserWindow } = require("electron");
 const path = require("path");
 const https = require("https");
+const fs = require("fs");
+const os = require("os");
+
+// Keep the map's localStorage out of the real app profile.
+app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "loopback-map-")));
+
+let failed = false;
+function check(name, cond, extra) {
+  console.log((cond ? "PASS" : "FAIL") + "  " + name + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
+  if (!cond) failed = true;
+}
 
 function proxyFetch(url, cb) {
   https.get(url, res => {
@@ -38,8 +49,19 @@ app.whenReady().then(() => {
           console.log("LAYERS " + JSON.stringify(d));
           console.log("DOM-ICONS " + JSON.stringify(dom));
           console.log("CONSOLE-ERRORS " + JSON.stringify(errors));
-          app.quit();
-        }).catch(e => { console.log("ERR " + e.message + " :: " + JSON.stringify(errors)); app.quit(); });
+          const entries = d && Object.entries(d);
+          check("all map layer toggles report a state", !!entries && entries.length >= 14, entries && entries.map(([k]) => k));
+          check("every toggled layer is attached to the map", !!entries && entries.every(([, v]) => v && v.on === true && v.onMap === true), d);
+          check("real datasets render markers (hazards, ports, air quality, infrastructure)",
+            !!d && d.wildfire.markers > 0 && d.ports.markers > 0 && d.airq.markers > 0 &&
+            d.chokepoints.markers > 0 && d.datacenters.markers > 0 && d.nuclear.markers > 0 &&
+            d.bases.markers > 0 && d.spaceports.markers > 0,
+            d && { wildfire: d.wildfire.markers, ports: d.ports.markers, airq: d.airq.markers });
+          check("no invented aircraft or ships when no licensed live feed is connected",
+            dom.planes === 0 && dom.ships === 0, dom);
+          check("no renderer errors", errors.length === 0, errors);
+          app.exit(failed ? 1 : 0);
+        }).catch(e => { console.log("ERR " + e.message + " :: " + JSON.stringify(errors)); app.exit(1); });
     }, 11000);
   });
 });
