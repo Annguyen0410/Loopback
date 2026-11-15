@@ -447,7 +447,16 @@ body.dark .media-actions button.danger:hover{background:#3b1a1a;color:#f87171}
 
 .media-preview{z-index:320;background:rgba(0,0,0,.72)}
 .media-preview-frame{width:min(920px,94vw);height:min(80vh,720px);background:var(--bg-primary);border-radius:16px;border:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 72px rgba(0,0,0,.4);animation:popIn .15s ease}
-.media-preview-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text-primary);gap:8px}
+/* While the preview is up it covers the whole window, including the media
+   library's own ✕ in the top-right corner — and that is exactly where a hand
+   goes to get out. So the preview owns that corner: one click there closes it,
+   and the library ✕ is live again underneath. It used to live inside the
+   centred frame 200px to the left, so the reflex click hit the overlay and
+   looked like a dead button. */
+.media-preview-close{position:absolute;top:10px;right:10px;z-index:3;width:40px;height:40px;min-width:40px;border-radius:12px;background:rgba(20,21,23,.72);color:#fff;border:1px solid rgba(255,255,255,.14);box-shadow:0 8px 24px rgba(0,0,0,.45);backdrop-filter:blur(6px)}
+.media-preview-close:hover{background:rgba(34,36,40,.92);color:#fff}
+.media-preview-close svg{width:18px;height:18px}
+.media-preview-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 62px 10px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text-primary);gap:8px}
 .media-preview-bar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .media-preview-body{flex:1;min-height:0;display:grid;place-items:center;background:#0b0c0e;padding:12px}
 .media-preview-body img,.media-preview-body video{max-width:100%;max-height:100%;border-radius:8px}
@@ -784,7 +793,9 @@ body.pip-max .pip-resize{display:none!important}
 @keyframes lbIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
 .lb-name{font-size:11px;color:#ccc;text-align:center}
 .lb-img{max-width:100%;max-height:80vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
-.lb-close{position:absolute;top:-32px;right:0;width:28px;height:28px;border:none;background:rgba(255,255,255,.1);border-radius:50%;color:#eee;cursor:pointer;font-size:12px}
+/* Pinned to the window corner, not to the picture: at `top:-32px` on a short
+   window the ✕ was drawn above the viewport and could not be clicked at all. */
+.lb-close{position:absolute;top:12px;right:12px;width:36px;height:36px;border:1px solid rgba(255,255,255,.16);background:rgba(20,21,23,.72);border-radius:10px;color:#eee;cursor:pointer;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
 .lb-close:hover{background:rgba(255,255,255,.2)}
 .attach-image img{cursor:zoom-in;transition:opacity .15s}
 .attach-image img:hover{opacity:.9}

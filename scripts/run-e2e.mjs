@@ -35,6 +35,7 @@ const SUITES = [
   { key: 'hud', file: 'hudtest.js', env: 'HUDTEST_USERDATA', timeout: 90_000 },
   { key: 'menu', file: 'menutest.js', env: 'MENUTEST_USERDATA', timeout: 120_000 },
   { key: 'capture', file: 'captest.js', env: 'CAPTEST_USERDATA', timeout: 120_000 },
+  { key: 'gallery', file: 'gallerytest.js', env: 'GALLERYTEST_USERDATA', timeout: 120_000 },
   { key: 'record', file: 'rectest.js', env: 'RECTEST_USERDATA', timeout: 150_000 },
   { key: 'review', file: 'reviewtest.js', env: 'REVIEWTEST_USERDATA', timeout: 150_000 },
   { key: 'camera', file: 'camtest.js', env: 'CAMTEST_USERDATA', timeout: 180_000 },

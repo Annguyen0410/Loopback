@@ -89,6 +89,10 @@ function closeEscapeTargets() {
     const pb = $("mediaPreviewBody");
     if (pb) { pb.querySelectorAll("video").forEach(v => { try { v.pause(); } catch {} }); pb.innerHTML = ""; }
   }
+  // A chat image opened full-size has the same "how do I get out" need as the
+  // media preview; Esc closes it even when the pointer is somewhere else.
+  const lbox = document.querySelector(".lightbox");
+  if (lbox) { lbox.remove(); closed = true; }
   const mp = $("mediaPanel");
   if (mp && !mp.hidden) { closeGallery(); closed = true; }
   const mini = $("miniPanel");

@@ -40,7 +40,9 @@ function openLightbox(src, name) {
   if (!lb) {
     lb = document.createElement("div");
     lb.className = "lightbox";
-    lb.innerHTML = '<div class="lb-bg"></div><div class="lb-content"><div class="lb-name"></div><img class="lb-img" alt=""><button class="lb-close">&#x2715;</button></div>';
+    /* The ✕ is a sibling of the picture, not a child of it: it has to stay in
+       the window's corner even when the image is taller than the viewport. */
+    lb.innerHTML = '<div class="lb-bg"></div><button class="lb-close" title="Close" aria-label="Close">&#x2715;</button><div class="lb-content"><div class="lb-name"></div><img class="lb-img" alt=""></div>';
     lb.querySelector(".lb-close").onclick = () => lb.remove();
     lb.querySelector(".lb-bg").onclick = () => lb.remove();
     document.body.append(lb);

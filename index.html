@@ -311,12 +311,12 @@
 
   <!-- Fullscreen preview for a library item -->
   <div class="modal-overlay media-preview" id="mediaPreview" hidden>
+    <button class="icon-btn media-preview-close" id="mediaPreviewClose" title="Close" data-tip="Close the preview (Esc).">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
     <div class="media-preview-frame">
       <div class="media-preview-bar">
         <span id="mediaPreviewTitle"></span>
-        <button class="icon-btn" id="mediaPreviewClose" title="Close">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
       </div>
       <div class="media-preview-body" id="mediaPreviewBody"></div>
     </div>
