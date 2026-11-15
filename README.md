@@ -1,23 +1,36 @@
+<div align="center">
+
+<img src="assets/icon.png" alt="Loopback" width="96" height="96">
+
 # Loopback
 
-> Renamed from **Messenger Self-Chat** in **v1.3.9** (the old name collided with
-> Meta's "Messenger" and read like a half-finished feature).
+**A private chat with yourself.** Notes, files, voice messages, screenshots and
+screen recordings, local-first, in a desktop window that looks like a chat app.
 
-A small **Electron desktop app** that looks like Facebook Messenger, but it's
-just you — a private notebook styled as a chat-to-self, with full **file
-attachment** support, a **16-theme** design system, rich **markdown**, and a
-**floating always-on-top chat bubble** (PiP).
+[![Latest release](https://img.shields.io/github/v/release/Annguyen0410/Loopback?label=download&sort=semver&color=2f6fed&logo=windows)](https://github.com/Annguyen0410/Loopback/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078d4)](https://github.com/Annguyen0410/Loopback/releases/latest)
+[![No account](https://img.shields.io/badge/account-none%20%C2%B7%20no%20sync-2ea44f)](#where-data-lives)
 
-Type a message → it goes to disk. Drop a file → it copies to a local
-`files/` folder. Close the app, reopen it, everything is still there.
+[**Download for Windows**](https://github.com/Annguyen0410/Loopback/releases/latest) &nbsp;&middot;&nbsp; [**Website**](https://annguyen0410.github.io/Loopback/) &nbsp;&middot;&nbsp; [Features](#features) &nbsp;&middot;&nbsp; [Where data lives](#where-data-lives)
+
+<a href="https://annguyen0410.github.io/Loopback/"><img src="website/assets/shots/chat-dark.jpg" alt="The Loopback chat window in dark mode: a conversation with yourself, a screenshot attachment and the media library beside it." width="900"></a>
+
+</div>
 
 **Your notes never leave this machine.** Loopback has no account, no sync and no
 Loopback server: the chat, attachments, voice notes and captures are written to
 `%APPDATA%\messenger-self-chat` and nowhere else. The hidden workspace described
 under *Network* below contacts public news/API services when you deliberately
 open it; it never sends your messages, files or settings to them. Local storage
-is not encryption — anyone with access to your Windows account can read the
+is not encryption: anyone with access to your Windows account can read the
 files.
+
+Type a message, it goes to disk. Drop a file, it copies to a local `files/`
+folder. Close the app, reopen it, everything is still there.
+
+<sub>Renamed from **Messenger Self-Chat** in **v1.3.9** (the old name collided
+with Meta's "Messenger" and read like a half-finished feature).</sub>
 
 ---
 
