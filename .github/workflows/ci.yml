@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  logic:
+    name: Unit tests, types and bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (no display, no network)
+        run: npm test
+
+      - name: TaskOrbit TypeScript contract
+        run: npm run typecheck:automation
+
+      - name: Build the automation bundles
+        run: npm run build:automation
+
+      - name: Verify the packaged file list includes the generated bundles
+        run: |
+          node -e "
+          const pkg = require('./package.json');
+          const files = pkg.build.files;
+          for (const need of ['automation.html', 'automation-preload.cjs', 'automation-main/**/*', 'automation-ui/**/*']) {
+            if (!files.includes(need)) { console.error('missing from build.files: ' + need); process.exit(1); }
+          }
+          if (files.some(f => f.startsWith('website'))) { console.error('the website must not be packaged'); process.exit(1); }
+          console.log('packaging boundaries OK');
+          "
+
+  e2e:
+    name: Real-window Electron suites (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Electron download
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-43-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the automation workspace
+        run: npm run build:automation
+
+      - name: Electron E2E suites (isolated profiles)
+        run: npm run test:e2e
+
+      - name: Upload suite logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: .test-runs/*.log
+          retention-days: 7
+
+  website:
+    name: Website build and integrity check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Static integrity check (source)
+        working-directory: website
+        run: node scripts/check.mjs
+
+      - name: Production build
+        working-directory: website
+        env:
+          SITE_URL: https://loopback.example
+        run: node scripts/build.mjs
+
+      - name: Confirm the site is independent of the desktop app
+        run: |
+          test ! -d website/node_modules
+          node -e "
+          const pkg = require('./website/package.json');
+          if (pkg.dependencies && Object.keys(pkg.dependencies).length) {
+            console.error('the website must not depend on the app or a framework');
+            process.exit(1);
+          }
+          console.log('website has no runtime dependencies');
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: website-dist
+          path: website/dist
+          retention-days: 7
