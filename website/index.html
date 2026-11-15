@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopback — a private chat with yourself</title>
+<meta name="description" content="Loopback is a Windows desktop space for the notes you write to yourself: local-first messaging, files, voice notes, screenshots and recordings. No account, no sync server, no Loopback cloud.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0c0f">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Loopback">
+<meta property="og:title" content="Loopback — a private chat with yourself">
+<meta property="og:description" content="A desktop room with one occupant. Messages, files, voice notes and captures that stay on your machine.">
+<meta property="og:url" content="__SITE_URL__/">
+<meta property="og:image" content="__SITE_URL__/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Loopback's chat window beside its floating bar, on a dark editorial page.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Loopback — a private chat with yourself">
+<meta name="twitter:description" content="Local-first notes, files, voice messages, screenshots and recordings in one desktop room. No account, no sync server.">
+<meta name="twitter:image" content="__SITE_URL__/assets/og.jpg">
+<link rel="canonical" href="__SITE_URL__/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self' 'sha256-UAuk2XIite5aSg91EyaDQrZaCVE7j7iRoV8pnqYn6GA='; connect-src 'none'; font-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="main.js"></script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Loopback","applicationCategory":"ProductivityApplication","applicationSubCategory":"Notes and messaging","operatingSystem":"Windows 10, Windows 11","softwareVersion":"1.9.11","license":"https://opensource.org/license/mit","isAccessibleForFree":true,"codeRepository":"https://github.com/Annguyen0410/Loopback","description":"A private desktop chat with yourself: local-first notes, file attachments, voice messages, screenshots, screen recordings, a floating always-on-top bar, and optional world-monitor and automation workspaces.","featureList":["Chat with yourself","Local-first JSON storage","File attachments","Voice messages","16 chat themes","Floating always-on-top bar","Screenshots with a review card","Screen recording with camera","Media library","World Monitor workspace","TaskOrbit automation workspace"]}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="site-head">
+  <div class="site-head-inner">
+    <a class="brand" href="#top" aria-label="Loopback — back to the top">
+      <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
+        <path d="M21 8.2A9 9 0 1 0 23 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+        <path d="M23.4 3.6v6.2h-6.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+      </svg>
+      <span>Loopback</span>
+    </a>
+    <nav class="site-nav" aria-label="Sections">
+      <a href="#room">The room</a>
+      <a href="#bar">The bar</a>
+      <a href="#themes">Themes</a>
+      <a href="#capture">Capture</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="site-head-actions">
+      <a class="btn btn-small" href="#download">Get Loopback</a>
+      <button class="menu-btn" type="button" popovertarget="site-menu" aria-label="Open the section menu" data-menu-toggle>
+        <span aria-hidden="true"></span><span aria-hidden="true"></span>
+      </button>
+    </div>
+  </div>
+  <div class="menu-panel" id="site-menu" popover>
+    <nav aria-label="Sections (menu)">
+      <a href="#room">01 · The room</a>
+      <a href="#bar">02 · The bar</a>
+      <a href="#themes">03 · Themes</a>
+      <a href="#capture">04 · Capture</a>
+      <a href="#monitor">05 · World Monitor</a>
+      <a href="#automation">06 · Automation</a>
+      <a href="#privacy">07 · Privacy</a>
+      <a href="#gallery">08 · Gallery</a>
+      <a href="#faq">09 · FAQ</a>
+      <a href="#download">10 · Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <span id="top" class="anchor"></span>
+
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow">Loopback 1.9.10 · Windows 10 &amp; 11 · MIT</p>
+        <h1 id="hero-title">Everything you say to yourself <em>comes back.</em></h1>
+        <p class="lede">
+          A desktop room with one occupant. Write a note, drop a file, record a thought out loud,
+          grab the thing on your screen — and find all of it again in a conversation that never
+          leaves your machine.
+        </p>
+        <div class="hero-actions">
+          <a class="btn" href="#download">
+            Get Loopback
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          </a>
+          <a class="btn btn-ghost" href="#privacy">Read the privacy model</a>
+        </div>
+        <dl class="facts">
+          <div><dt>Account</dt><dd>None</dd></div>
+          <div><dt>Sync server</dt><dd>None</dd></div>
+          <div><dt>Data lives in</dt><dd><code>%APPDATA%\<wbr>messenger-self-chat</code></dd></div>
+          <div><dt>Themes</dt><dd>16</dd></div>
+        </dl>
+      </div>
+
+      <figure class="plate hero-plate">
+        <div class="plate-frame">
+          <img src="assets/shots/chat-blue.jpg" width="1440" height="900" fetchpriority="high" decoding="async"
+               alt="The Loopback chat window in its Blue theme: one conversation with yourself, a markdown note with a checklist, a pinned message, a file attachment and the message composer.">
+        </div>
+        <figcaption>
+          <span>01</span> The main window. One participant, three chats, a pinned thought.
+        </figcaption>
+        <img class="hero-bar" src="assets/shots/bar-vertical.png" width="168" height="858" alt="Loopback's floating bar: a narrow always-on-top strip with open, automation, screenshot, record, media and settings buttons.">
+      </figure>
+    </div>
+  </section>
+
+  <section class="section" id="room" aria-labelledby="room-title">
+    <div class="section-head">
+      <p class="eyebrow">01 · Your private space</p>
+      <h2 id="room-title">One room, one occupant.</h2>
+    </div>
+    <div class="split">
+      <div class="prose">
+        <p class="lede-sm">
+          Loopback looks like a messenger because a messenger is a good place to put a thought.
+          The difference is who is on the other end: nobody.
+        </p>
+        <p>
+          Every message is written to a JSON document on disk the moment you press Enter. Attachments
+          are copied into a local <code>files/</code> folder, voice notes into <code>voice/</code>,
+          captures into <code>captures/</code>. Reopen the app a year later and the conversation is
+          still there, in the order you left it.
+        </p>
+        <p>
+          Keep separate chats for the things you don't want mixed — notes to self, ideas, tasks —
+          pin the message you keep re-reading, and search every chat at once. Matching ignores
+          Vietnamese accents, so <em>gio</em> finds <em>giờ</em>.
+        </p>
+        <ul class="ticks">
+          <li>Markdown notes: tables, checklists, quotes, code, images</li>
+          <li>Any file type, with inline previews and players</li>
+          <li>Reply, react, edit, pin, copy as Markdown</li>
+          <li>A global quick-note popup on <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd></li>
+        </ul>
+      </div>
+      <aside class="data-card" aria-label="Where Loopback keeps your data">
+        <p class="data-title">On disk, not in a cloud</p>
+        <pre class="tree" aria-label="Loopback data folder layout"><code>%APPDATA%\messenger-self-chat\
+├── messages.json    chats + messages
+├── settings.json    theme, bar, startup
+├── pip.json         bar orientation, position
+├── backups\         copies made before a migration
+├── files\           attachments
+├── voice\           voice notes
+└── captures\        screenshots, recordings</code></pre>
+        <p class="data-note">
+          Written atomically — temporary file, then rename — with the previous version kept
+          as <code>.bak</code>. The folder keeps its original name on purpose: renaming it would
+          look like every note had been lost.
+        </p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="section" id="bar" aria-labelledby="bar-title">
+    <div class="section-head">
+      <p class="eyebrow">02 · Desktop presence</p>
+      <h2 id="bar-title">It waits at the edge of the screen.</h2>
+    </div>
+    <div class="split split-reverse">
+      <div class="bar-demo" data-bar-demo data-state="collapsed">
+        <div class="bar-stage" aria-hidden="true">
+          <div class="bar-edge"></div>
+          <div class="bar-stage-inner">
+            <img class="bar-collapsed" src="assets/shots/bar-vertical.png" width="168" height="858" alt="The collapsed Loopback bar at the screen edge." loading="lazy" decoding="async">
+            <img class="bar-open" src="assets/shots/pip-chat.jpg" width="860" height="1400" alt="The floating mini-chat opened from the bar." loading="lazy" decoding="async">
+          </div>
+          <div class="bar-toast">A quieter way back: minimize into the bar.</div>
+        </div>
+        <div class="bar-controls">
+          <div class="segment" role="group" aria-label="Bar state demonstration">
+            <button type="button" data-bar-state="collapsed" aria-pressed="true">Collapsed</button>
+            <button type="button" data-bar-state="open" aria-pressed="false">Opened</button>
+          </div>
+          <p class="demo-label"><span>Live demonstration</span> The real bar and popup, played back on this page — not a connection to the installed app.</p>
+        </div>
+      </div>
+      <div class="prose">
+        <p class="lede-sm">
+          The chat window can get out of the way without leaving you with an empty desktop.
+        </p>
+        <p>
+          Minimizing tucks Loopback into a narrow always-on-top bar docked to either edge — one
+          straight column of round buttons for the chat, the automation workspace, a screenshot, a
+          recording, the media library and recording settings. Drag it to move it; a click opens the
+          mini-chat.
+        </p>
+        <p>
+          It behaves like a window that happens to float: the corner grip resizes it, the expand
+          button fills the work area and gives it a taskbar slot, and dropping a file on it attaches
+          that file. With <em>Show the bar when the app starts</em> on, it is already there when
+          Windows finishes booting.
+        </p>
+        <ul class="ticks">
+          <li>Docks left or right, remembers its place, returns to a display that still exists</li>
+          <li>Vertical tab or horizontal pill, three sizes</li>
+          <li>Drag files onto it to attach them instantly</li>
+          <li>Lives in the tray; closing every window does not quit it</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-wide" id="themes" aria-labelledby="themes-title">
+    <div class="section-head">
+      <p class="eyebrow">03 · Design system</p>
+      <h2 id="themes-title">Sixteen rooms, one set of furniture.</h2>
+      <p class="section-note">
+        Same layout, different light. Each theme keeps its hue but paints with a calmer, slate-mixed
+        version of it, and every bubble was darkened until white text clears WCAG AA at both ends of
+        the gradient.
+      </p>
+    </div>
+
+    <div class="theme-shell" data-theme-shell="blue">
+      <figure class="plate theme-plate">
+        <div class="plate-frame">
+          <img id="themeShot" src="assets/shots/themes/blue.jpg" width="1200" height="751" loading="lazy" decoding="async"
+               alt="Loopback's chat window in the Blue theme.">
+        </div>
+        <figcaption>
+          <span aria-hidden="true">03</span>
+          <span id="themeCaption" aria-live="polite">Blue — the default. A cool, quiet room.</span>
+        </figcaption>
+      </figure>
+
+      <fieldset class="swatches">
+        <legend class="sr-only">Choose a chat theme</legend>
+        <label class="swatch" data-theme-option="blue"><input type="radio" name="theme" value="blue" checked><span class="dot" aria-hidden="true"></span><span class="name">Blue</span><span class="mood">Default</span></label>
+        <label class="swatch" data-theme-option="purple"><input type="radio" name="theme" value="purple"><span class="dot" aria-hidden="true"></span><span class="name">Purple</span><span class="mood">Night ideas</span></label>
+        <label class="swatch" data-theme-option="pink"><input type="radio" name="theme" value="pink"><span class="dot" aria-hidden="true"></span><span class="name">Pink</span><span class="mood">Soft</span></label>
+        <label class="swatch" data-theme-option="green"><input type="radio" name="theme" value="green"><span class="dot" aria-hidden="true"></span><span class="name">Green</span><span class="mood">Steady</span></label>
+        <label class="swatch" data-theme-option="orange"><input type="radio" name="theme" value="orange"><span class="dot" aria-hidden="true"></span><span class="name">Orange</span><span class="mood">Warm</span></label>
+        <label class="swatch" data-theme-option="red"><input type="radio" name="theme" value="red"><span class="dot" aria-hidden="true"></span><span class="name">Red</span><span class="mood">Loud</span></label>
+        <label class="swatch" data-theme-option="teal"><input type="radio" name="theme" value="teal"><span class="dot" aria-hidden="true"></span><span class="name">Teal</span><span class="mood">Clear</span></label>
+        <label class="swatch" data-theme-option="gradient"><input type="radio" name="theme" value="gradient"><span class="dot" aria-hidden="true"></span><span class="name">Gradient</span><span class="mood">Indigo</span></label>
+        <label class="swatch" data-theme-option="sunset"><input type="radio" name="theme" value="sunset"><span class="dot" aria-hidden="true"></span><span class="name">Sunset</span><span class="mood">Late</span></label>
+        <label class="swatch" data-theme-option="ocean"><input type="radio" name="theme" value="ocean"><span class="dot" aria-hidden="true"></span><span class="name">Ocean</span><span class="mood">Deep</span></label>
+        <label class="swatch" data-theme-option="forest"><input type="radio" name="theme" value="forest"><span class="dot" aria-hidden="true"></span><span class="name">Forest</span><span class="mood">Grounded</span></label>
+        <label class="swatch" data-theme-option="candy"><input type="radio" name="theme" value="candy"><span class="dot" aria-hidden="true"></span><span class="name">Candy</span><span class="mood">Playful</span></label>
+        <label class="swatch" data-theme-option="mono"><input type="radio" name="theme" value="mono"><span class="dot" aria-hidden="true"></span><span class="name">Mono</span><span class="mood">Plain</span></label>
+        <label class="swatch" data-theme-option="galaxy"><input type="radio" name="theme" value="galaxy"><span class="dot" aria-hidden="true"></span><span class="name">Galaxy</span><span class="mood">Deep violet</span></label>
+        <label class="swatch" data-theme-option="aurora"><input type="radio" name="theme" value="aurora"><span class="dot" aria-hidden="true"></span><span class="name">Aurora</span><span class="mood">Animated</span></label>
+        <label class="swatch" data-theme-option="coffee"><input type="radio" name="theme" value="coffee"><span class="dot" aria-hidden="true"></span><span class="name">Coffee</span><span class="mood">Paper</span></label>
+      </fieldset>
+    </div>
+    <p class="theme-foot">Every image above is a capture of the real window in that theme — no recoloured mockups.</p>
+  </section>
+
+  <section class="section" id="capture" aria-labelledby="capture-title">
+    <div class="section-head">
+      <p class="eyebrow">04 · Capture</p>
+      <h2 id="capture-title">Catch the thought, framed.</h2>
+      <p class="section-note">
+        Screenshots and recordings are not a separate app you open. They sit on the rail and on the
+        floating bar, and they end somewhere you can find them again.
+      </p>
+    </div>
+    <ol class="steps">
+      <li><span class="step-n">01</span><h3>Pick a region</h3><p>The screen freezes, you drag a box, and the shot is saved before you let go. The floating bar is parked off every display for the grab, so a selection across the edge captures what is behind it.</p></li>
+      <li><span class="step-n">02</span><h3>Review it, right there</h3><p>A small always-on-top card opens with the picture, its size and its dimensions: Download, Copy, Save as…, Show in folder, Delete. The note line prints a caption under the shot and bakes it into the file.</p></li>
+      <li><span class="step-n">03</span><h3>Or record it</h3><p>Screen plus microphone and camera, with a HUD for pause, quality, frame rate and device choice. The camera bubble is burned into the video exactly where you parked it.</p></li>
+      <li><span class="step-n">04</span><h3>Keep the library</h3><p>Every capture lands in the media library with inline playback and seekable recordings, named like a diary: <code>14-11-2026_18-05-09-shot.png</code>.</p></li>
+    </ol>
+
+    <div class="capture-plates">
+      <figure class="plate plate-offset">
+        <div class="plate-frame"><img src="assets/shots/chat-media.jpg" width="1200" height="751" loading="lazy" decoding="async" alt="The Loopback media library panel listing captured screenshots and screen recordings with previews."></div>
+        <figcaption><span>04a</span> Media library — screenshots and recordings, in one place.</figcaption>
+      </figure>
+      <figure class="plate plate-offset-2">
+        <div class="plate-frame"><img src="assets/shots/chat-settings.jpg" width="1200" height="751" loading="lazy" decoding="async" alt="Loopback's settings panel: theme picker, floating bar options, recording presets and startup toggles."></div>
+        <figcaption><span>04b</span> Settings — the bar, recording, startup and storage.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section section-dark" id="monitor" aria-labelledby="monitor-title">
+    <div class="section-head">
+      <p class="eyebrow">05 · Beyond the conversation</p>
+      <h2 id="monitor-title">A window on the world — when you open it.</h2>
+      <p class="section-note">
+        World Monitor is a workspace that is deliberately not in the rail, the tray, the settings or
+        the bubble. It is an experience secret, not a security boundary: the source is public, so it
+        keeps the workspace out of the way rather than protecting it.
+      </p>
+    </div>
+    <figure class="plate plate-wide">
+      <div class="plate-frame"><img src="assets/shots/monitor.jpg" width="1600" height="900" loading="lazy" decoding="async" alt="Loopback's World Monitor workspace: a world map with event layers, a filtered event timeline and feed-health panels."></div>
+      <figcaption><span>05</span> One normalized event stream, a map that only plots events with coordinates, and a feed-health panel that says CACHED, STALE or OFFLINE instead of inventing calm.</figcaption>
+    </figure>
+    <div class="columns">
+      <div>
+        <h3>Public sources, no keys</h3>
+        <p>USGS earthquakes, GDACS disasters, GDELT conflict reports, IODA outages, NOAA space weather, Open-Meteo weather and air quality, EONET, World Bank, CISA advisories, Launch Library 2, and the RSS feeds of listed newsrooms.</p>
+      </div>
+      <div>
+        <h3>One owner per feed</h3>
+        <p>The main process owns news, quakes and indices; the page owns the rest. Duplicate owners and an out-of-allowance aircraft feed were removed, cutting a measured 130-second session from 155 requests to 113.</p>
+      </div>
+      <div>
+        <h3>Nothing of yours goes out</h3>
+        <p>Requests go through an exact-hostname allowlist, HTTPS only, no credentials in the URL, a 12-second deadline, an 8&nbsp;MB body cap and per-host cooldowns. Your messages, files and settings are never part of a request.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="automation" aria-labelledby="automation-title">
+    <div class="section-head">
+      <p class="eyebrow">06 · Automation</p>
+      <h2 id="automation-title">When the desktop should do the repetitive part.</h2>
+    </div>
+    <div class="split">
+      <figure class="plate">
+        <div class="plate-frame"><img src="assets/shots/automation.jpg" width="1600" height="1001" loading="lazy" decoding="async" alt="The TaskOrbit automation workspace inside Loopback: dashboard, scheduler, watchers, credential vault and automation tools in their own window."></div>
+        <figcaption><span>06</span> TaskOrbit runs in its own window, with its own SQLite database under <code>automation\</code>.</figcaption>
+      </figure>
+      <div class="prose">
+        <p class="lede-sm">One app, one tray, one installer — two very different jobs.</p>
+        <p>
+          The automation workspace bundles a scheduler, a credential vault encrypted with a
+          machine-bound key, watchers with cooldowns, an auto clicker and key presser, a tab
+          clicker over a dedicated Chrome profile, PromptForge, auto-posting and a phone control
+          panel for a trusted Wi-Fi network.
+        </p>
+        <p>
+          It never touches the chat: the automation database, logs, browser profiles and IPC
+          namespace are separate, and the chat window can only ask the workspace to open. Closing
+          that window does not quit Loopback; the tray keeps the scheduler alive.
+        </p>
+        <ul class="ticks">
+          <li>Separate SQLite vault, separate preload, sandboxed renderer</li>
+          <li>Global hotkeys registered through the host, never a second tray</li>
+          <li>Windows-only features say so instead of failing silently</li>
+          <li>One-way import of an older TaskOrbit vault, source left untouched</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section paper" id="privacy" aria-labelledby="privacy-title">
+    <div class="section-head">
+      <p class="eyebrow">07 · Privacy and trust</p>
+      <h2 id="privacy-title">Local means local. It does not mean encrypted.</h2>
+      <p class="section-note">
+        This is the part most apps decorate. Loopback's architecture is small enough to describe
+        exactly, so here it is without adjectives.
+      </p>
+    </div>
+    <div class="privacy-grid">
+      <div class="privacy-col">
+        <h3>What Loopback does</h3>
+        <ul class="plain-list">
+          <li>Writes your messages, chats, settings and captures to your Windows profile.</li>
+          <li>Copies attachments into its own folder so a moved original does not break a note.</li>
+          <li>Keeps a verified backup before the first schema migration, and never deletes it.</li>
+          <li>Runs entirely offline for chat, search, themes, capture and the media library.</li>
+          <li>Contacts public data sources only while the World Monitor window is open, and stops when it closes.</li>
+        </ul>
+      </div>
+      <div class="privacy-col">
+        <h3>What Loopback does not do</h3>
+        <ul class="plain-list crossed">
+          <li>No Loopback account, sign-in or profile.</li>
+          <li>No Loopback-hosted message synchronization.</li>
+          <li>No telemetry, analytics or update check in the chat.</li>
+          <li>No encryption of the chat store, the attachments or the captures.</li>
+          <li>No claim that a local file is private from anyone who can use your Windows account.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout">
+      <p class="callout-title">The honest sentence</p>
+      <p>
+        Anyone with access to your Windows account — or to an account with permission to read your
+        AppData folder — can read these files. Loopback is private in the sense that it is yours and
+        nobody else's server holds it. It is not a vault. If you need encryption at rest, use an
+        encrypted Windows volume or a container around the data folder.
+      </p>
+    </div>
+    <div class="privacy-notes">
+      <p><strong>The one network feature.</strong> World Monitor fetches public feeds; the proxy
+        allows HTTPS to an exact hostname list, rejects credentials in URLs, follows redirects only
+        to other allowed hosts, enforces a deadline, a body cap and concurrency limit. None of your
+        content is sent.</p>
+      <p><strong>One exclusion worth naming.</strong> Live aircraft are paused: OpenSky's terms
+        require a licence for this kind of use, so the layer says it is paused instead of fabricating
+        traffic.</p>
+      <p><strong>Security boundaries.</strong> Every window uses context isolation and no Node
+        integration; disk access happens in the main process behind a per-window role and channel
+        matrix; external links are validated and opened in the OS browser.</p>
+    </div>
+  </section>
+
+  <section class="section" id="gallery" aria-labelledby="gallery-title">
+    <div class="section-head">
+      <p class="eyebrow">08 · Gallery</p>
+      <h2 id="gallery-title">The same room, from different angles.</h2>
+    </div>
+    <div class="gallery">
+      <figure class="g1"><img src="assets/shots/chat-dark.jpg" width="1200" height="751" loading="lazy" decoding="async" alt="Loopback in dark mode, with the conversation sidebar and a markdown note."><figcaption>Dark mode, Blue theme</figcaption></figure>
+      <figure class="g2"><img src="assets/shots/pip-chat.jpg" width="860" height="1400" loading="lazy" decoding="async" alt="The floating mini-chat opened from Loopback's bar, with its own composer."><figcaption>The floating mini-chat</figcaption></figure>
+      <figure class="g3"><img src="assets/shots/monitor.jpg" width="1600" height="900" loading="lazy" decoding="async" alt="The World Monitor's event timeline and map layers."><figcaption>World Monitor</figcaption></figure>
+      <figure class="g4"><img src="assets/shots/chat-media.jpg" width="1200" height="751" loading="lazy" decoding="async" alt="The media library with a screenshot and a recording."><figcaption>Media library</figcaption></figure>
+      <figure class="g5"><img src="assets/shots/themes/galaxy.jpg" width="1200" height="751" loading="lazy" decoding="async" alt="Loopback in the Galaxy theme."><figcaption>Galaxy theme</figcaption></figure>
+      <figure class="g6"><img src="assets/shots/automation.jpg" width="1600" height="1001" loading="lazy" decoding="async" alt="TaskOrbit's automation dashboard inside Loopback."><figcaption>TaskOrbit workspace</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="section" id="faq" aria-labelledby="faq-title">
+    <div class="section-head">
+      <p class="eyebrow">09 · Questions</p>
+      <h2 id="faq-title">Answers, without the brochure.</h2>
+    </div>
+    <div class="faq-layout">
+      <div class="faq-aside">
+        <p>Something not covered here is probably in the repository's README, which documents the
+          actual behaviour — including the limitations.</p>
+        <a class="link-arrow" href="https://github.com/Annguyen0410/Loopback#readme" target="_blank" rel="noopener noreferrer">Read the README <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="faq">
+        <details name="faq" open>
+          <summary>What exactly is Loopback?</summary>
+          <p>A Windows desktop application that presents a private notebook as a chat with yourself. It is built with Electron, stores everything locally, and adds a floating bar, screen capture and two optional workspaces: a world monitor and an automation suite.</p>
+        </details>
+        <details name="faq">
+          <summary>Which platforms are supported?</summary>
+          <p>The installer is a Windows NSIS build, and Windows is the supported platform today. The source is Electron and much of it is cross-platform, but the packaged target, tray behaviour, login item, auto clicker and installer are Windows-specific.</p>
+        </details>
+        <details name="faq">
+          <summary>Where is my data stored, and can I move it?</summary>
+          <p>In <code>%APPDATA%\messenger-self-chat</code>: JSON documents plus <code>files\</code>, <code>voice\</code> and <code>captures\</code> folders. Settings offer an export to JSON and a button that opens the folder. Because it is plain files, you can copy the folder — but close the app first so a write cannot land mid-copy.</p>
+        </details>
+        <details name="faq">
+          <summary>Is it encrypted?</summary>
+          <p>The chat store, attachments and captures are not encrypted. They are ordinary files protected by your Windows account and disk permissions. The automation vault is separately encrypted with a machine-bound key, but that does not cover the chat. See the privacy section above.</p>
+        </details>
+        <details name="faq">
+          <summary>Does anything leave my machine?</summary>
+          <p>The chat does not: no account, telemetry, update check or sync. The World Monitor fetches public feeds while its window is open. The automation workspace can use the network only for features you configure, such as providers, posting or the phone panel.</p>
+        </details>
+        <details name="faq">
+          <summary>What kind of files can I attach?</summary>
+          <p>Any type. Images get thumbnails, audio and video get players, and everything else becomes a card with its name and size. Files are copied into the app's storage, so the note keeps working if the original moves.</p>
+        </details>
+        <details name="faq">
+          <summary>How do the themes and dark mode interact?</summary>
+          <p>They are independent. A theme sets the accent hue and the chat wallpaper; dark mode sets the surfaces. All sixteen themes are designed to be readable in both, and the app ships a contrast audit that measures the rendered styles.</p>
+        </details>
+        <details name="faq">
+          <summary>How do I install or update it?</summary>
+          <p>Build the installer from the repository with <code>npm install</code> and <code>npm run build</code>, then run the NSIS setup produced in <code>dist\</code>. Updating is the same installer; it replaces the installed copy in place and your data folder is untouched.</p>
+        </details>
+        <details name="faq">
+          <summary>How do I open the World Monitor?</summary>
+          <p>It is intentionally undocumented in the interface — the README explains the reasoning and does not publish the entry point. It is a focus feature, not a security boundary.</p>
+        </details>
+        <details name="faq">
+          <summary>What does the automation workspace need?</summary>
+          <p>A normal Windows session. Browser-based features expect Chrome or Edge installed; the auto clicker cannot operate on elevated windows unless the app is elevated too. Nothing is enabled until you configure it.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="section download" id="download" aria-labelledby="download-title">
+    <div class="section-head">
+      <p class="eyebrow">10 · Download</p>
+      <h2 id="download-title">Take the room with you.</h2>
+      <p class="section-note">
+        Loopback is an independent MIT-licensed project. There is no store listing and no account
+        wall: the installer is built from this repository.
+      </p>
+    </div>
+    <div class="download-grid">
+      <div class="download-card">
+        <p class="download-kicker">Windows 10 &amp; 11 · NSIS</p>
+        <h3>Build the installer</h3>
+        <p>Clone the repository, install dependencies, and let electron-builder produce the setup
+          executable. Your notes live outside the install folder, so reinstalling never touches them.</p>
+        <pre class="code"><code>git clone https://github.com/Annguyen0410/Loopback.git
+cd Loopback
+npm install
+npm run build
+# → dist\Loopback Setup 1.9.10.exe</code></pre>
+        <div class="download-actions">
+          <a class="btn" href="https://github.com/Annguyen0410/Loopback" target="_blank" rel="noopener noreferrer">Repository <span aria-hidden="true">↗</span></a>
+          <a class="btn btn-ghost" href="https://github.com/Annguyen0410/Loopback/releases" target="_blank" rel="noopener noreferrer">Releases <span aria-hidden="true">↗</span></a>
+        </div>
+        <p class="fineprint">
+          No binary is hosted on this page. The Releases page is the only place a published build
+          would appear; if it is empty, build from source as shown above.
+        </p>
+      </div>
+      <div class="download-card download-card-quiet">
+        <p class="download-kicker">Run from source</p>
+        <h3>Try it without installing</h3>
+        <p>The app runs straight from the checkout — no installer, no build step:</p>
+        <pre class="code"><code>npm start
+# the E2E suites use throwaway profiles:
+npm run test:e2e</code></pre>
+        <h3 class="mt">Check what you are trusting</h3>
+        <ul class="ticks">
+          <li><code>npm test</code> — pure logic, no display, no network</li>
+          <li><code>npm run typecheck:automation</code> — IPC contract types</li>
+          <li><code>npm run test:e2e</code> — real Electron windows</li>
+          <li><a href="https://github.com/Annguyen0410/Loopback/blob/main/docs/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">docs/ARCHITECTURE.md</a> — ownership, data roots, adding a feature</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-foot">
+  <div class="site-foot-inner">
+    <div class="foot-brand">
+      <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
+        <path d="M21 8.2A9 9 0 1 0 23 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+        <path d="M23.4 3.6v6.2h-6.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+      </svg>
+      <div>
+        <p class="foot-name">Loopback</p>
+        <p class="foot-note">A private chat with yourself. Version 1.9.10.</p>
+      </div>
+    </div>
+    <nav class="foot-nav" aria-label="Footer">
+      <div>
+        <p class="foot-head">Product</p>
+        <a href="#room">Features</a>
+        <a href="#themes">Themes</a>
+        <a href="#capture">Capture</a>
+        <a href="#download">Download</a>
+      </div>
+      <div>
+        <p class="foot-head">Project</p>
+        <a href="https://github.com/Annguyen0410/Loopback" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/Annguyen0410/Loopback/releases" target="_blank" rel="noopener noreferrer">Releases <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/Annguyen0410/Loopback/blob/main/docs/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">Architecture <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/Annguyen0410/Loopback/blob/main/QA-CHECKLIST.md" target="_blank" rel="noopener noreferrer">QA checklist <span aria-hidden="true">↗</span></a>
+      </div>
+      <div>
+        <p class="foot-head">Trust</p>
+        <a href="#privacy">Privacy model</a>
+        <a href="https://github.com/Annguyen0410/Loopback/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT licence <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/Annguyen0410/Loopback/issues" target="_blank" rel="noopener noreferrer">Issues <span aria-hidden="true">↗</span></a>
+        <a href="#faq">FAQ</a>
+      </div>
+    </nav>
+  </div>
+  <p class="foot-legal">© <span data-year>2026</span> Loopback. An independent project; not affiliated with Meta. This page is a static site with no analytics, no cookies and no third-party requests.</p>
+</footer>
+</body>
+</html>

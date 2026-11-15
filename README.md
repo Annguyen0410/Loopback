@@ -32,6 +32,25 @@ npm start          # launch the desktop app
 That opens the Loopback window. Type into the bottom input and hit
 **Enter** to drop a note.
 
+## Website
+
+The public product site lives in `website/` and is a **separate static product**:
+its own `package.json`, no runtime dependencies and no shared code with the
+Electron app. `build.files` is an explicit allowlist, so nothing under
+`website/` is ever packaged into the installer.
+
+```bash
+cd website
+npm run dev        # http://127.0.0.1:4173
+npm run build      # dist/ + sitemap.xml, then the integrity check
+npm run preview    # serve dist/
+```
+
+The product screenshots on the site are captured from the real running app, not
+drawn by hand. Re-run `npx electron scripts/website-shots.cjs` (from the project
+root, throwaway profile) after changing the UI. Details, deployment notes and
+the design/technology decisions are in [website/README.md](website/README.md).
+
 ## Automation workspace
 
 Loopback now includes the TaskOrbit automation suite in the same app: dashboard,
@@ -249,7 +268,12 @@ empty folder: `mkdir assets`.
   left), and the bar sits docked and collapsed on the side. The bubble shows a
   one-line tip with the way back; tapping it opens the chat popup, launching the
   app again restores the window, and closing the bar brings the chat window
-  back automatically (so the app is never left with nothing on screen)
+  back automatically (so the app is never left with nothing on screen). Every
+  one of those paths ends in the same place: the bar is rebuilt if it was
+  closed, collapsed if it was the chat, **pulled back onto a display** if it
+  was left off-screen (a monitor that was unplugged, a screenshot that parked
+  it, a resolution change), and shown again if it was hidden — minimize can no
+  longer leave an empty desktop behind
 - **Subdued palette** — every theme keeps its hue (`--accent-key`) but the
   colour the UI actually paints with is mixed toward a neutral slate
   (`--accent: color-mix(in srgb, var(--accent-key) 64–68%, #6f7681)`, with
@@ -500,7 +524,9 @@ been lost.
 - The global hotkey is registered best-effort: if another app already owns
   `Ctrl+Alt+N` the ⚡ rail button still opens the popup (a warning is logged).
 - **Unit tests**: `npm test` runs the pure-logic suites with no display and no network. The current suite is
-  **869/869 passing**: atomic writes, the IPC role/channel/permission matrix, external-URL boundaries, the
+  **1951/1951 passing**: atomic writes, the IPC role/channel/permission matrix, external-URL boundaries, the
+  floating bar's geometry and visibility rules (every position × every monitor layout, plus the wiring that
+  keeps "minimize" from leaving nothing on screen), the
   feed scheduler (one owner per feed, overlap guard, backoff, abort, timeout), the monitor proxy (allowlist,
   redirects, body cap, cooldowns, concurrency), the chat store (revision guard, stale quick note, size cap),
   the data migration (verified backup, idempotence, refuses a corrupt file), shared text helpers and the
@@ -510,7 +536,7 @@ been lost.
   *Network and the hidden workspace*. The manual Windows/installer checks live in
   [QA-CHECKLIST.md](QA-CHECKLIST.md) and are not claimed as automated coverage.
 - **E2E runner**: `npm run test:e2e` runs every real-window suite with a throwaway profile (`npm run test:e2e -- --list`
-  shows the keys). The current release gate is **16/16 suites, 491 passing checks**, documented in
+  shows the keys). The current release gate is **16/16 suites, 493 passing checks**, documented in
   [tests/README.md](tests/README.md); `npm run test:all` is the release gate.
   The architecture map is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - `audittest.js` (`npx electron audittest.js`) is the "is the app healthy and

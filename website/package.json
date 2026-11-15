@@ -1,0 +1,16 @@
+{
+  "name": "loopback-website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The public product website for Loopback. Independent of the Electron app: no shared runtime, no shared dependencies.",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/serve.mjs --dir=dist --port=4173",
+    "check": "node scripts/check.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
