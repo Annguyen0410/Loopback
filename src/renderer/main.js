@@ -189,13 +189,20 @@ function initPipMode() {
       expandArmed = true;
       dragMoved = false;
       downScreen = { x: e.screenX, y: e.screenY };
+      /* The window position is read locally so a drag never waits for IPC:
+         window.screenX/Y is the real window origin in the same DIP space the
+         pointer reports. A slow round trip used to swallow the FIRST gesture
+         entirely (the base arrived after pointerup), which made the bubble feel
+         dead on the first grab. */
       dragState = {
         sx: e.screenX, sy: e.screenY,
-        base: null, moved: false, id: e.pointerId
+        base: { x: Math.round(window.screenX), y: Math.round(window.screenY) },
+        moved: false, id: e.pointerId
       };
       pendingPos = null;
       try { bubble.setPointerCapture(e.pointerId); } catch {}
-      // Refresh base in background; moves wait until it arrives.
+      // Correct the local base from main in the background (it is authoritative
+      // when the window was moved by something else).
       Promise.resolve(api.pip.dragStart()).then(pos => {
         if (!dragState || dragState.id !== e.pointerId || !pos) return;
         dragState.base = pos;

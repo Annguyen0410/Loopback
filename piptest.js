@@ -478,6 +478,47 @@ app.whenReady().then(async () => {
       check("minimizing the app brings the floating bar up right away",
         !!minBar && minCollapsed === true, { minimized: mainWin.isMinimized(), bar: !!minBar, collapsed: minCollapsed });
       if (mainWin.isMinimized()) mainWin.restore();
+
+      /* The reported bug: "sometimes pressing minimize shows no floating bar at
+         all". A bar that already exists but was left off-screen (a monitor was
+         unplugged, the bar was parked for a screenshot) or hidden still looks
+         like "the bar is open" to the old handler, which then did nothing. Both
+         states have to come back on minimize. */
+      const onScreenNow = w => {
+        if (!w || w.isDestroyed()) return false;
+        const b = w.getBounds();
+        return screen.getAllDisplays().some(d => {
+          const a = d.workArea;
+          const ow = Math.min(b.x + b.width, a.x + a.width) - Math.max(b.x, a.x);
+          const oh = Math.min(b.y + b.height, a.y + a.height) - Math.max(b.y, a.y);
+          return ow >= 24 && oh >= 24;
+        });
+      };
+      let stray = findPip();
+      if (stray) {
+        stray.setPosition(-9000, -9000);
+        await wait(300);
+        mainWin.minimize();
+        await wait(1200);
+        const pulledBack = findPip();
+        check("a bar left off-screen is pulled back when the app is minimized",
+          !!pulledBack && onScreenNow(pulledBack) && pulledBack.isVisible(),
+          { bounds: pulledBack ? pulledBack.getBounds() : null, visible: pulledBack ? pulledBack.isVisible() : null });
+        if (mainWin.isMinimized()) mainWin.restore();
+
+        if (findPip()) findPip().hide();
+        await wait(300);
+        mainWin.minimize();
+        await wait(1200);
+        const reShown = findPip();
+        check("a hidden bar is shown again when the app is minimized",
+          !!reShown && reShown.isVisible() && onScreenNow(reShown),
+          { visible: reShown ? reShown.isVisible() : null, bounds: reShown ? reShown.getBounds() : null });
+        if (mainWin.isMinimized()) mainWin.restore();
+        await wait(300);
+      } else {
+        console.log("SKIP  off-screen / hidden bar recovery (no bar to park)");
+      }
     } else {
       console.log("SKIP  minimizing shows the bar (no main window found)");
     }

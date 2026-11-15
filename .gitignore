@@ -25,3 +25,9 @@ _asarcheck/
 
 # build artifacts that are not releases
 dist-usezip/
+
+# website build output
+website/dist/
+
+# agent skill installer lock
+skills-lock.json

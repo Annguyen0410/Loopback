@@ -33,7 +33,17 @@ COMBOTEST_USERDATA   SEARCHTEST_USERDATA  TRAYTEST_USERDATA
 `monitortest.js`, `monitor-test.js`, `layerbar-test.js` and
 `tests/automation-app-smoke.cjs` create their own scratch profiles.
 
-The current gate is **16 suites / 491 E2E checks** plus **869 unit tests**.
+The current gate is **16 suites / 493 E2E checks** plus **1951 unit tests**.
+
+`tests/pip-geometry.test.js` is the table-driven suite for the floating bar:
+every bar position against every monitor layout (single, dual left/right/above,
+three mixed, 4K), every orientation and scale, the display-change cases behind
+"minimize shows no bar" (unplugged monitor, shrunk resolution, bar parked for a
+screenshot, sliver drag) and a seeded randomised invariant sweep.
+`tests/pip-bar-wiring.test.js` then asserts that `main.js` keeps the shape of the
+fix: one `showPipBar` for every "show the bar" request, no early return on
+"already open", and clamping on the collapse, resize, flip and post-screenshot
+paths.
 
 Run one suite while debugging:
 

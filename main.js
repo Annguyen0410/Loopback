@@ -13,6 +13,8 @@ const { installIpcGuard, pageRole, roleForUrl, permissionAllowed } = require("./
 const { externalUrl, isAppPage } = require("./src/main/security.js");
 const { createMonitorProxy } = require("./src/main/monitor-proxy.js");
 const { createMonitorScheduler } = require("./src/main/monitor-scheduler.js");
+/* Pure floating-bar geometry: where the bar may sit, and whether it is visible at all. */
+const pipGeometry = require("./src/main/pip-geometry.js");
 /* The automation module's only door into the host: lifecycle, its window, notifications, hotkeys. */
 const automationHost = require("./src/main/automation-host.js");
 
@@ -111,8 +113,10 @@ const IS_TEST_BOOT = !!(require.main && require.main.filename && require.main.fi
 /* Smoke tests stay window-only by default; traytest.js sets this to exercise
    the real background path (tray icon + keep-alive) in the same process. */
 const TRAY_IN_TEST = process.env.LOOPBACK_TRAY_TEST === "1";
-const PIP_BUBBLE_H = { w: 320, h: 52 }; // horizontal pill (fits TaskOrbit + four capture tools)
-const PIP_BUBBLE_V = { w: 56, h: 286 }; // vertical bookmark tab (fits six stacked actions)
+/* The bar's sizes are owned by the geometry module, so the window that gets created and the rectangle that
+   gets clamped back onto a display can never disagree about how big the bar is. */
+const PIP_BUBBLE_H = pipGeometry.BUBBLE_H; // horizontal pill (fits TaskOrbit + four capture tools)
+const PIP_BUBBLE_V = pipGeometry.BUBBLE_V; // vertical bookmark tab (fits six stacked actions)
 const PIP_CHAT = { w: 430, h: 700 };
 const PIP_CFG = () => path.join(app.getPath("userData"), "pip.json");
 
@@ -136,10 +140,7 @@ function pipScale() {
   } catch { return 1; }
 }
 function pipBubbleSize() {
-  const s = pipScale();
-  return pipVertical
-    ? { w: Math.round(PIP_BUBBLE_V.w * s), h: Math.round(PIP_BUBBLE_V.h * s) }
-    : { w: Math.round(PIP_BUBBLE_H.w * s), h: Math.round(PIP_BUBBLE_H.h * s) };
+  return pipGeometry.bubbleSize(pipVertical, pipScale());
 }
 /* Which screen edge the collapsed bar parks against. */
 function pipDockSide() {
@@ -158,12 +159,31 @@ function pipWorkArea() {
 function dockPipBounds(side) {
   const s = pipBubbleSize();
   const wa = pipWorkArea();
-  const gap = 6;
-  return {
-    x: (side || pipDockSide()) === "left" ? wa.x + gap : wa.x + wa.width - s.w - gap,
-    y: wa.y + Math.max(gap, Math.round((wa.height - s.h) / 2)),
-    width: s.w, height: s.h
+  const docked = pipGeometry.dockBounds(wa, s, side || pipDockSide());
+  return docked || { x: wa.x, y: wa.y, width: s.w, height: s.h };
+}
+/* Every work area that exists RIGHT NOW. A saved bar position is only meaningful against these: a laptop
+   undocked from its second monitor keeps the old coordinates in pip.json, and those coordinates are now
+   empty space — a bar that is open, "visible" to Electron, and impossible to see or click. */
+function visibleWorkAreas() {
+  try {
+    const areas = screen.getAllDisplays().map(d => d.workArea);
+    if (areas.length) return areas;
+    return [screen.getPrimaryDisplay().workArea];
+  } catch { return []; }
+}
+/* Pull a collapsed-bar rectangle back onto a display that exists today. Returns a rect that is always safe
+   to hand to setBounds (never a NaN from a torn or hand-edited pip.json). */
+function clampBarRect(rect) {
+  const size = pipBubbleSize();
+  const box = {
+    x: Math.round(Number(rect && rect.x) || 0),
+    y: Math.round(Number(rect && rect.y) || 0),
+    width: Math.round(Number(rect && rect.width) || size.w),
+    height: Math.round(Number(rect && rect.height) || size.h)
   };
+  const fixed = pipGeometry.ensureOnScreen(box, visibleWorkAreas(), { minVisible: pipGeometry.MIN_VISIBLE });
+  return fixed.bounds || { x: box.x, y: box.y, width: size.w, height: size.h };
 }
 const DATA = () => path.join(app.getPath("userData"), "messages.json");
 const SETTINGS = () => path.join(app.getPath("userData"), "settings.json");
@@ -933,6 +953,16 @@ function registerHandlers() {
       if (p.w && !p.w.isDestroyed()) { try { p.w.setPosition(p.x, p.y); } catch {} }
     }
     shotStowing = false;
+    /* A shot can outlive the monitor the bubble was parked on, and a restore to
+       coordinates that no longer exist would leave the bar outside every
+       display until the NEXT screenshot. It is pulled back now. */
+    if (alive(pipWin) && pipCollapsed) {
+      try {
+        const b = pipWin.getBounds();
+        const fixed = clampBarRect(b);
+        if (fixed.x !== b.x || fixed.y !== b.y) pipWin.setBounds(fixed);
+      } catch {}
+    }
   }
 
   /* A picker window, judged by the page it renders. `shot:done` / `shot:cancel`
@@ -1697,6 +1727,12 @@ function registerHandlers() {
     clearTimeout(pipPosTimer);
     pipPosTimer = setTimeout(() => {
       if (!pipWin || pipWin.isDestroyed()) return;
+      /* The check has to be repeated here, not only at call time: a save queued
+         just BEFORE a screenshot parked the bar would otherwise fire 250 ms
+         later and write those parked coordinates to pip.json — the bar then
+         reopens outside every display, which reads as "the floating bar is
+         gone". */
+      if (shotStowing) return;
       const [x, y] = pipWin.getPosition();
       savePipCfg({ x, y });
     }, 250);
@@ -1762,6 +1798,16 @@ function registerHandlers() {
     pipAutoExpand = expand;
     if (docked) savePipCfg({ x: docked.x, y: docked.y });
     pipWin.loadFile(path.join(__dirname, "index.html"), { query: { pip: "1" } });
+    /* A transparent window that is shown while Windows runs its minimize
+       animation can end up composited with no frame at all: Electron reports
+       it as visible and the screen shows nothing. Re-asserting the show when
+       the first frame is ready turns "minimize → the bar is there" into a rule
+       instead of a race. Expanded popups are already shown by the OS. */
+    pipWin.once("ready-to-show", () => {
+      if (!alive(pipWin) || !pipCollapsed) return;
+      try { pipWin.showInactive(); } catch {}
+      try { if (typeof pipWin.moveTop === "function") pipWin.moveTop(); } catch {}
+    });
     // Content protection is applied ONLY while a recording actually hides the
     // app (see capture:setContentProtection) — never permanently at creation.
     // On Windows, keeping a *transparent* window content-protected makes it
@@ -1803,17 +1849,75 @@ function registerHandlers() {
     return true;
   }
 
+  /* Put the floating BAR in front of the user, whatever state it was left in.
+   *
+   * This is the single answer to "pressing minimize sometimes shows no floating
+   * bar at all": every path that used to end with nothing on screen now ends
+   * here.
+   *   - the window is gone           → rebuilt (openPip),
+   *   - it is an expanded popup      → collapsed to the bar,
+   *   - it sits off every display    → pulled back onto the nearest one (pip.json
+   *     written on a monitor that     is still holding coordinates from a monitor
+   *     is no longer attached, or     that was unplugged, a resolution that shrank,
+   *     parked for a screenshot)      or positions parked outside every screen),
+   *   - it is hidden or minimized    → show() brings it back,
+   *   - it claims to be visible but  → it is shown again. A transparent window
+   *     paints nothing                 whose show() was dropped during the Windows
+   *                                    minimize animation reports isVisible()
+   *                                    === true and renders nothing.
+   * With `side`, a bar that is not already visible is docked to that edge; a bar
+   * the user parked somewhere visible keeps its place. Never throws, and returns
+   * the window (or null when nothing could be made). */
+  function showPipBar(side) {
+    try {
+      if (!alive(pipWin)) {
+        openPip({ expand: false, dock: side });
+      } else if (!pipCollapsed) {
+        ipcMain.emit("pip:collapse"); // an expanded popup becomes the bar (and calls back here)
+      }
+      if (!alive(pipWin) || !pipCollapsed) return alive(pipWin) ? pipWin : null;
+      const size = pipBubbleSize();
+      const b = pipWin.getBounds();
+      const areas = visibleWorkAreas();
+      const visible = pipWin.isVisible() && !pipWin.isMinimized();
+      let target = { x: b.x, y: b.y, width: size.w, height: size.h };
+      const onScreen = pipGeometry.isOnScreen(target, areas, { minVisible: pipGeometry.MIN_VISIBLE });
+      if (side && (!onScreen || !visible)) {
+        const wa = pipGeometry.pickWorkArea(pipGeometry.centerOf(target), areas, pipWorkArea());
+        const docked = pipGeometry.dockBounds(wa, size, side);
+        if (docked) target = docked;
+        savePipCfg({ x: target.x, y: target.y });
+      }
+      const fixed = pipGeometry.ensureOnScreen(target, areas, { minVisible: pipGeometry.MIN_VISIBLE });
+      if (fixed.bounds) target = fixed.bounds;
+      if (target.x !== b.x || target.y !== b.y || target.width !== b.width || target.height !== b.height) {
+        pipWin.setMinimumSize(0, 0);
+        pipWin.setResizable(false);
+        pipWin.setBounds(target);
+      }
+      pipWin.setAlwaysOnTop(true);
+      pipWin.setSkipTaskbar(true);
+      if (pipWin.isMinimized()) pipWin.restore();
+      /* showInactive, not show: the bar appears when the user minimized Loopback
+         to work in another app, so taking the focus away from that app would be
+         the opposite of what they asked for. moveTop brings it forward in the
+         z-order without activating it. */
+      pipWin.showInactive();
+      if (typeof pipWin.moveTop === "function") pipWin.moveTop();
+      try { pipWin.webContents.send("pip:state", "collapsed"); } catch {}
+    } catch (err) {
+      console.warn("[Main] showing the floating bar failed:", (err && err.message) || err);
+    }
+    refreshTrayMenu();
+    return alive(pipWin) ? pipWin : null;
+  }
+
   ipcMain.on("pip:open", () => openPip());
   /* The floating BAR, docked to one side, right now. Used on launch and when
      the main window is minimized — the user gets the bar immediately instead
      of having to collapse a window first. */
   ipcMain.on("pip:openbar", (e, side) => {
-    const w = openPip({ expand: false, dock: side });
-    if (!w || w.isDestroyed()) return;
-    try { w.setAlwaysOnTop(true); w.setSkipTaskbar(true); } catch {}
-    try { w.showInactive(); } catch {}
-    try { w.webContents.send("pip:state", "collapsed"); } catch {}
-    refreshTrayMenu();
+    showPipBar(side);
   });
   /* Rail toggle: never kill the floating window by accident.
      closed → the BAR, docked (so the floating bar really "starts" on one side)
@@ -1835,11 +1939,15 @@ function registerHandlers() {
      itself (tap it to open the chat popup), launching the app again, or closing
      the bar (see pip:close below). */
   ipcMain.on("app:tuckIntoBar", () => {
-    if (!alive(win)) return;
     let cfg = {};
     try { cfg = loadCfg(); } catch {}
-    if (!alive(pipWin)) ipcMain.emit("pip:openbar", {}, cfg.pipDock);
-    else if (!pipCollapsed) ipcMain.emit("pip:collapse");
+    /* The bar is the whole point of this button, so it goes on screen FIRST and
+       unconditionally: built when missing, collapsed when expanded, pulled back
+       from off-screen, and shown again when hidden or unpainted. Only then is
+       the chat window put away. The old early return when there was no chat
+       window left, and the "already collapsed → do nothing" branch, are exactly
+       the clicks that hid the chat and left nothing behind. */
+    ipcMain.emit("pip:openbar", {}, cfg.pipDock);
     hideChatWindow();
     // Teach the way back once, in the window that is still on screen.
     setTimeout(() => {
@@ -1947,10 +2055,10 @@ function registerHandlers() {
     const s = pipBubbleSize();
     pipWin.setMinimumSize(0, 0);
     pipWin.setResizable(false);
-    animatePipBounds({
+    animatePipBounds(clampBarRect({
       x: Math.round(cx - s.w / 2), y: Math.round(cy - s.h / 2),
       width: s.w, height: s.h
-    }, 130);
+    }), 130);
   });
 
   ipcMain.on("pip:flip", () => {
@@ -1966,10 +2074,10 @@ function registerHandlers() {
         const s = pipBubbleSize();
         pipWin.setMinimumSize(0, 0);
         pipWin.setResizable(false);
-        animatePipBounds({
+        animatePipBounds(clampBarRect({
           x: Math.round(cx - s.w / 2), y: Math.round(cy - s.h / 2),
           width: s.w, height: s.h
-        }, 130);
+        }), 130);
       }
       pipWin.webContents.send("pip:orient", pipVertical ? "vertical" : "horizontal");
     }
@@ -2043,6 +2151,11 @@ function registerHandlers() {
       };
     }
     lastBubblePos = null;
+    /* A saved position is not proof of a visible one: it may have been written
+       on a monitor that is no longer attached, or parked outside every display
+       for a screenshot. Clamping here is what keeps "minimize" from collapsing
+       into a window nobody can see. */
+    target = clampBarRect(target);
     try { pipWin.setBounds(target); } catch {}
     pipWin.setAlwaysOnTop(true);
     pipWin.setSkipTaskbar(true);
@@ -2054,6 +2167,9 @@ function registerHandlers() {
       }
     }, 60);
     try { pipWin.webContents.send("pip:state", "collapsed"); } catch {}
+    /* Collapsing ends with the bar ON SCREEN. With the chat tucked away this is
+       the app's only surface, so an invisible bar is the same as no app. */
+    showPipBar();
   });
 
   /* Realtime sync: a change saved in one window is replayed into the others. */
@@ -2478,11 +2594,21 @@ function createWindow() {
     let mcfg = {};
     try { mcfg = loadCfg(); } catch {}
     if (mcfg.pipOnMinimize === false) return;
-    if (alive(pipWin)) {
-      if (!pipCollapsed) ipcMain.emit("pip:collapse"); // expanded → the bar
-      return;
-    }
+    /* Always re-assert the bar instead of only reacting to "no bar yet": the
+       window may exist, be collapsed, and still be invisible (hidden earlier,
+       parked off-screen, or a transparent window whose show was dropped during
+       the minimize animation). Returning early on "already collapsed" is how a
+       minimize ended up doing nothing at all. */
     ipcMain.emit("pip:openbar", {}, mcfg.pipDock);
+    /* Windows finishes the minimize transition after this event, so the show is
+       repeated once it has settled. Costs nothing when the bar is already up. */
+    setTimeout(() => {
+      if (!alive(w) || !w.isMinimized()) return;
+      let late = {};
+      try { late = loadCfg(); } catch {}
+      if (late.pipOnMinimize === false) return;
+      ipcMain.emit("pip:openbar", {}, late.pipDock);
+    }, 260);
   });
 
   /* Forget the window instead of keeping a destroyed object around — that

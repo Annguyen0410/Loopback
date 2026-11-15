@@ -16,6 +16,7 @@ main.js                         Electron lifecycle, windows, IPC registration
 │   ├── atomic-write.js        crash-safe file replacement
 │   ├── store.js               one chat-document owner + revision guard
 │   ├── store-migrations.js    verified first-run backup
+│   ├── pip-geometry.js        floating-bar size, docking and on-screen rules
 │   ├── portable-janitor.js    cleanup of old portable extraction
 │   ├── monitor-proxy.js       allowlisted feed proxy
 │   ├── monitor-scheduler.js   one owner per feed
@@ -85,6 +86,16 @@ is reserved for the automation role.
 
 The legacy TaskOrbit source tree is not kept in the project root. Active code is
 under `src/automation`, with the runtime bundles generated at the paths above.
+
+## Website
+
+`website/` is the public product site: static HTML/CSS/ES modules with no
+runtime dependency, its own `package.json` and its own build output
+(`website/dist/`, gitignored). It is deliberately **not** part of the app:
+`build.files` in the root `package.json` is an allowlist that does not include
+it, and `scripts/website-shots.cjs` only reads the app (through a throwaway
+profile) to produce real screenshots. Changing the app's UI does not require a
+website change, and the website cannot affect `npm start` or `npm run build`.
 
 ## Tests
 
